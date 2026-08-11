@@ -1,0 +1,253 @@
+# 問題集の再現可能な検証手順
+
+大量問題の品質検査を担当者ごとの感覚にしないため、共通JSONL、既定閾値、意味・独立Review記録、生成再現性検査を使う。既存プロジェクトに同等以上の検査がある場合は、対応表と実行結果を残して代用できる。
+
+## 目次
+
+- [1. 共通JSONLへ書き出す](#1-共通jsonlへ書き出す)
+- [2. 件数目標をJSONで保存する](#2-件数目標をjsonで保存する)
+- [3. 二段階ReviewをHash付きで記録する](#3-二段階reviewをhash付きで記録する)
+- [4. 一次情報を追跡する](#4-一次情報を追跡する)
+- [5. 正答の手掛かりを検査する](#5-正答の手掛かりを検査する)
+- [6. 類似判定の既定値](#6-類似判定の既定値)
+- [7. 共通検査を実行する](#7-共通検査を実行する)
+- [8. 生成再現性を検査する](#8-生成再現性を検査する)
+- [9. プロジェクト固有形式へ接続する](#9-プロジェクト固有形式へ接続する)
+
+## 1. 共通JSONLへ書き出す
+
+問題生成元を直接置き換えず、検証用に一問一行のUTF-8 JSONLを書き出す。
+
+```json
+{"id":"IAM-001","question_set":"practice","objective":"IAM.1","difficulty":"medium","cognitive_type":"diagnosis","question_type":"single_choice","artifact_types":["configuration"],"artifact_evidence":[{"type":"configuration","location":"stem","content":"{\n  \"Effect\": \"Deny\",\n  \"Action\": \"s3:DeleteObject\"\n}","decision_binding":"The Effect and Action fields determine the denied operation."}],"stem":"Inspect this policy statement:\n{\n  \"Effect\": \"Deny\",\n  \"Action\": \"s3:DeleteObject\"\n}","options":{"A":"...","B":"...","C":"...","D":"..."},"correct":"B","rendered_correct":"B","correct_explanation":"...","wrong_explanations":{"A":"...","C":"...","D":"..."},"links":["../iam/#policy-evaluation"],"sources":["https://docs.example.com/iam/policy-evaluation"],"source_reviewed_at":"2026-07-18"}
+```
+
+基本必須項目は `id`、`objective`、`difficulty`、`cognitive_type`、`stem`、`options`、`correct`、`correct_explanation`、`wrong_explanations`、`links` とする。`question_set`、`question_type`、`sources`、`source_reviewed_at`、`artifact_types`、`artifact_evidence` は最終検査で必須化する。`question_set`は通常問題を `practice`、模擬問題を `mock` として一問ごとに保持する。`links`は関連講義または用語、`sources`は正答を支える公式一次情報として分ける。`artifact_types` は正答判断に必要な実務Artifactを [exam-question-fidelity.md](exam-question-fidelity.md) の共通分類で保持し、概念問題は空Listにする。`artifact_evidence` は各宣言Typeにつき一件を持ち、`type`、`location`（`stem` または `option:<key>`）、その場所にExact substringとして存在する `content`、判断に必要な行・Field・Operator・値・関係を示す `decision_binding` を保持する。概念問題は空Listにする。
+
+`correct`は問題形式に合わせる。
+
+- `single_choice`: Option KeyのString
+- `multiple_response`: 正答KeyのList。順序は意味を持たない。`select_count`に正答数を入れるか、選択数を固定しない形式では`selection_instruction`に表示する選択条件を入れる
+- `ordering`: 全Keyを一度ずつ並べたList。順序が意味を持つ
+- `matching`: 左側Keyから右側ValueへのObject。少なくとも二つの異なる対応先を持たせ、一対一対応が必要な試験ではProject固有検査で全対応先の一意性も確認する
+
+生成済みMarkdown／HTMLから正答を読み取れる場合、`rendered_correct`も書き出し、生成元の`correct`と照合する。既存ProjectでField名が異なる場合は、読み取り専用Adapterで共通形式へ変換する。
+
+## 2. 件数目標をJSONで保存する
+
+新規講座、または通常問題集の大幅増量・全面整備で、ユーザーが完成総数を明示していない場合、`total` は次の標準完成件数と一致させる。限定修正、レビュー、公開だけの依頼ではこのPolicyを新たな増量の根拠にしない。
+
+| `credential_level` | `total` |
+|---|---:|
+| `associate-equivalent` | 500 |
+| `professional-equivalent` | 1000 |
+
+`credential_level` は `associate-equivalent`、`professional-equivalent`、`not-applicable` のいずれかとし、ベンダーの公式資格体系、想定経験、試験対象から判断した根拠を別の追跡可能な記録へ残す。`not-applicable` でユーザー指定もない場合は、問題作成前に完成総数を確認する。
+
+通常問題集の `work_mode` は新規を `new`、一問以上ある既存通常問題集の変更を `existing` とする。`existing` では正の `baseline_total` とBaseline Hash比較を必須にし、`new` ではBaselineを省略する。これにより、既存通常問題集の全面整備やユーザー指定件数でも、着手前問題の全置換を検査なしで通さない。模擬試験の目標ファイルには `work_mode` とPractice用Count Policyを入れない。
+
+`count_mode` は次のいずれかとする。
+
+| `count_mode` | 用途 | 必須値 |
+|---|---|---|
+| `standard` | ユーザー指定がない Associate／Professional 相当 | レベル別の `total` |
+| `user-specified-total` | ユーザーが完成総数を指定 | `requested_total` |
+| `user-specified-increment` | ユーザーが追加数を指定 | `baseline_total`、`requested_increment` |
+| `retained-overage` | 既存有効問題が標準件数を超え、削除しない | 標準超過の `baseline_total` |
+| `scope-exempt-existing` | 限定修正、Review、公開だけで既存件数を維持 | 変更前と同じ `baseline_total` |
+
+`credential_level_source` にレベル判定を支える公式HTTPS URL、`credential_level_reviewed_at` に確認日を保存する。通常問題集の最終検査では、根拠URLのHostを `--official-source-host` で一件以上許可する。`question_set` は通常問題集を `practice`、模擬試験を `mock` とする。章末など複数箇所へ同じ通常問題を表示する場合も、一意な正規問題IDを一度だけJSONLへ出力する。Validatorは各問の `question_set` と目標ファイルを照合するため、通常問題と模擬問題を同じJSONLへ混ぜない。模擬試験は別の目標ファイルで管理し、通常問題集の `total` へ加算しない。
+
+既存問題を変更する前に、同梱Validatorの `--hash-report baseline-hashes.csv` で問題ID、内容Hash、着手前件数を保存する。変更後は `--baseline-hash-report baseline-hashes.csv` で比較する。既存IDの変更または削除がある場合だけ、次のCSVを `--baseline-change-log` へ渡す。理由のない変更、未記録の削除、現在の差分と一致しない古い記録はエラーにする。削除理由にはユーザーの明示的な削除依頼を記録する。
+
+```csv
+id,action,reason,approval_ref
+IAM-002,changed,曖昧な条件を修正して意味Reviewを再実施,
+IAM-009,removed,ユーザーが重複問題の削除を明示,user-message-2026-07-24
+```
+
+次は Professional 相当の標準件数を検査する自己完結した例である。
+
+```json
+{
+  "question_set": "practice",
+  "work_mode": "new",
+  "credential_level": "professional-equivalent",
+  "credential_level_source": "https://docs.example.com/credentials/levels",
+  "credential_level_reviewed_at": "2026-07-24",
+  "count_mode": "standard",
+  "total": 1000,
+  "objectives": {
+    "OBJ.1": 250,
+    "OBJ.2": 250,
+    "OBJ.3": 250,
+    "OBJ.4": 250
+  },
+  "allowed_question_types": ["single_choice", "multiple_response", "ordering", "matching"],
+  "question_types": {
+    "single_choice": 720,
+    "multiple_response": 200,
+    "ordering": 40,
+    "matching": 40
+  },
+  "difficulties": {
+    "knowledge_recall": 250,
+    "single_concept_application": 500,
+    "multi_concept_integration": 250
+  },
+  "cognitive_types": {
+    "comparison": 250,
+    "application": 300,
+    "diagnosis": 250,
+    "design_decision": 200
+  },
+  "artifact_policy": {
+    "calibration_evidence": [
+      {
+        "kind": "exam_guide",
+        "status": "current",
+        "url": "https://docs.example.com/credentials/exam-guide",
+        "reviewed_at": "2026-07-24"
+      },
+      {
+        "kind": "official_sample",
+        "status": "current",
+        "url": "https://docs.example.com/credentials/sample-questions",
+        "reviewed_at": "2026-07-24"
+      }
+    ],
+    "calibration_note": "Official objectives and samples require configuration, command, and diagnostic artifact reasoning.",
+    "minimum_questions_with_artifacts": 600,
+    "minimum_by_type": {
+      "command": 180,
+      "configuration": 220,
+      "logs_metrics": 160,
+      "diagram_ui": 80
+    }
+  }
+}
+```
+
+実際には公式試験目標をすべて列挙する。`total` と実数の不一致に加え、目標数、許可されない問題形式、形式別件数、難易度、思考タイプと実数の不一致はエラーにする。公式ガイドが形式別比率を公開していない場合も、`allowed_question_types`には公式に許可された形式を、`question_types`には教材として設計した件数を入れ、その配分理由を別途記録する。`artifact_policy.calibration_evidence` には現行公式ガイドと公式Sample／Practiceの調査結果を含め、Login必須、未発見、旧版もStatusとして残す。`artifact_policy.minimum_questions_with_artifacts` は少なくとも `ceil(total × 0.60)` とし、500問なら300、1,000問なら600未満を許可しない。最終検査では `--require-course-count-policy`、`--require-metadata-targets`、`--require-artifact-policy` を使い、Question Set、Level、根拠、Count Mode、標準件数またはユーザー指定、問題形式、難易度、思考タイプ、公式Calibration Evidence、全問のLearner-visible `artifact_evidence`、宣言Typeとの一致、60%下限、種類別最低数の省略・不一致を失敗にする。件数は検証済みEvidenceだけから集計する。
+
+模擬試験の目標ファイルには `question_set: "mock"` と模擬問題だけの `total`、各分布を入れ、各問にも `question_set: "mock"` を持たせる。同じ `--require-course-count-policy` で集合分離と件数を検査するが、`credential_level`、`count_mode`、500／1,000問の標準は適用しない。
+
+## 3. 二段階ReviewをHash付きで記録する
+
+```csv
+id,status,reviewer,notes,question_hash
+IAM-001,PASS,reviewer-a,,sha256:qbank-v1:9f7c...
+IAM-002,FIXED,reviewer-a,曖昧な条件を追加して再確認,sha256:qbank-v1:17a2...
+```
+
+意味Reviewと独立Reviewは別CSVにする。`status`は`PASS`または`FIXED`のみ完了とし、全問題IDが各台帳へ一度ずつ存在し、Reviewerが空でなく、`FIXED`には修正内容を必須とする。同じ問題の意味Reviewerと独立Reviewerは異なる値にする。
+
+Review stamp用CLIは、実際に確認したReviewer identityと範囲（全件、Domain、ID list、または固定Manifest）を明示入力として受け、台帳へそのまま記録する。一つのBoolean確認や一回の実行から、Domain別の複数Reviewer名をHard-codeして合成してはならない。一人が複数Domainを確認した場合は一つの正直なIdentityで記録し、二人によるReviewを主張するなら各Reviewerが自分の範囲を別々に確定した証拠を残す。Validatorは文字列が異なるだけで独立性を認定せず、Identity、Scope、現在Manifest hash、stamp操作の対応を検査する。
+
+Reviewを固定するContent manifestには、Review後も変化しない教材、Generator、Validator、Source mapを含める。そこへReview台帳、Stamp出力、またはContent hashとStatusを追記するAcceptance ADR自身を含めて循環参照を作らない。ADRを`Proposed`から`Accepted`へ変えただけでReview hashがstaleになる設計は禁止する。ADRやRelease metadataも含めた全体Hashが必要なら、Review用Content manifestとは別のRelease manifestとしてAcceptance後に計算し、二つの用途と境界を明記する。
+
+`question_hash`は、検証用内部Fieldを除く一問分のJSONをKey順でCanonical化し、UTF-8へEncodeしたVersion付きSHA-256（`sha256:qbank-v1:...`）とする。CRLF／LFとUnicode NFCを正規化し、Multiple Responseの正答集合は順不同として扱うが、数値、比較Operator、Orderingの順序は保持する。同梱Validatorの`--hash-report`で現在Hashを出力できる。問題を変更したら旧HashのReviewを完了扱いにせず、再Reviewして台帳を更新する。
+
+## 4. 一次情報を追跡する
+
+仕様依存問題では、`sources`へ正答を直接支える公式URLを一つ以上、`source_reviewed_at`へISO形式の確認日を入れる。試験ガイドだけでは製品挙動を裏付けられない場合、製品ドキュメントも入れる。
+
+- `--require-sources`でSourceと確認日を必須化する。
+- `--official-source-host`を繰り返して公式Hostを許可する。
+- `--max-source-age-days`で確認日の古さを警告できる。
+- 公式ページ同士が矛盾する場合、問題の正答を無理に一意化せず、Source記録と講義側の注記を先に直す。
+
+## 5. 正答の手掛かりを検査する
+
+`--check-answer-cues`で、Single Choice、True／False、Multiple Response全体における正答Optionの長さと、極端語・限定語の出現がCorrect／Incorrectへ偏っていないか警告する。Multiple Responseでは各正答Optionを正答集合のMemberとして数え、誤答Option群との長さ差も比較する。既定語は日本語と英語の「必ず」「絶対」「常に」「のみ」「always」「never」「must」「only」などとし、Project固有語は`--cue-term`で追加する。
+
+警告は機械的にOptionを書き換える合図ではなく、内容を理解せず推測できるかを意味Reviewする起点にする。用語自体が仕様上必要なら、理由を記録したProject固有検査で代用する。
+
+大規模なSingle Choice銀行では、単語ごとの警告がゼロでも検査を終えない。問題文を隠したOption proseのみから正答Option集合を予測する交差検証Classifierまたは同等のBackstopを実行し、ランダムLabel Baselineと比較する。異常に高い場合は、学習器を通す言い換えでなく、予測に貢献したOptionを全件読み、同じObjectiveの近接誤認か、破壊操作や非現実的な値だけで消去できる候補かを記録して修正する。実装した場合は、予測ロジックが実問題に依存せず、LabelをシャッフルしたBaselineで性能が下がることをfixtureで確認する。
+
+手掛かり修正の差分について、Code fenceの内外を問わずCommand-likeなOptionを再列挙する。編集前後でKeyword、API、Field、Enumが変わったら、その変更が意図した技術Mutationである記録を必須にし、記録のない同義語置換をエラーにする。正答の現行構文と正答解説に記録した構文が一致しないfixtureも必須にする。
+
+Validatorの自己検査では、実問題全体のPASS／FAILとは別に、各中間helperの最小正常例と最小失敗例を直接呼ぶ。例えばOption token extractorは、実在するTokenが一つ以上入るSetを返すことを先に断言し、正答の決定Tokenを解説から削ったfixtureがそのBinding errorで失敗することを確認する。関数の返却値が `None`または空Collectionなら、後続検査がたまたま緑でも自己検査を失敗させる。
+
+## 6. 類似判定の既定値
+
+同梱スクリプトは、完全一致判定では比較Operatorと数値を保持し、類似判定ではURLと数値差を吸収した文字5-gramのJaccard係数を使う。これにより、`<`と`>`、`!=`と`==`、Version 1.2と1.3を完全一致と誤判定しない。
+
+- 問題文の高類似: `0.82`以上
+- 解説の高類似: `0.90`以上
+- 正解解説の短文警告: 空白とMarkdownを除き80文字未満
+- 各誤答解説の短文警告: 同50文字未満
+- 完全一致の問題文、重複ID、不足フィールド、関連リンク欠落、目標数不一致、未完了レビュー: エラー
+- 同一問題内または問題間の同一解説、正答位置の偏り: 警告。最終検査の `--fail-on-warnings` で未解決なら失敗
+
+Option順を変更するGeneratorでは、表示後の正答・解説対応に加え、Label参照の置換境界を回帰テストする。少なくとも `Option A` や `A and C` のような明示的Labelは新しいLabelへ追従し、英語の `A sample` と区分名の `Project A` は変更されないことを確認する。
+
+閾値は言語や問題形式に合わせて変更できるが、変更値と理由をリポジトリへ記録する。高類似でも正当な別問題なら、allowlist CSVへ比較対象のLabelと理由を記録する。
+
+```csv
+kind,id1,label1,id2,label2,reason
+stem,IAM-041,stem,IAM-042,stem,同じ構成で権限境界の有無だけを比較する対問題
+explanation,IAM-051,correct,IAM-052,wrong-B,公式定義を対比するため同じ一文を引用せず要約して共有
+```
+
+`stem`行は旧`kind,id1,id2,reason`形式も受理し、空Labelを`stem`として扱う。`explanation`行は`correct`または`wrong-<Option Key>`の`label1`と`label2`を必須とする。設問IDだけの広い例外で、その二問間の別の重複説明まで隠してはならない。
+
+未置換の`TODO`、`TBD`、`FIXME`、`PLACEHOLDER`などは、問題文、選択肢、解説、選択指示、Matching対応先、Rendered Answerを含む学習者表示文字列で既定エラーにする。Project固有のMarkerは`--placeholder-pattern`を繰り返して追加する。「要件を満たさない」「リスクが増える」などの禁止句だけを接続語で連結・反復した説明も既定でエラーにし、追加の禁止句は`--forbidden-explanation`で指定する。具体的な原因、挙動、制約を続けた説明は、禁止句の部分一致だけでは失敗にしない。
+
+## 7. 共通検査を実行する
+
+```text
+python <skill-dir>/scripts/validate_question_bank.py questions.jsonl \
+  --targets targets.json \
+  --require-course-count-policy \
+  --require-metadata-targets \
+  --require-artifact-policy \
+  --review-ledger semantic-review.csv \
+  --independent-review-ledger independent-review.csv \
+  --require-independent-review \
+  --require-review-hashes \
+  --require-sources \
+  --official-source-host docs.example.com \
+  --check-answer-cues \
+  --allowlist similarity-allowlist.csv \
+  --fail-on-warnings
+```
+
+Windows PowerShellでは継続記号を使わず、一行で実行してよい。最終検査では`--fail-on-warnings`を付ける。警告をAllowlistへ移す前に意味Reviewを行い、理由のない抑制を禁止する。複数Providerを扱う場合は`--official-source-host`を繰り返す。
+
+既存通常問題集では `work_mode: "existing"` と正の `baseline_total` を保存し、上記コマンドへ `--require-baseline-protection --baseline-hash-report baseline-hashes.csv` を加える。変更・削除した既存問題がある場合は、さらに `--baseline-change-log baseline-changes.csv` を加える。限定修正、Review、公開だけなら `count_mode: "scope-exempt-existing"` として着手前件数を維持する。新規通常問題集では `work_mode: "new"` とし、Baseline引数を使わない。既存模擬試験では目標ファイルに `work_mode` を入れず、CLIの `--require-baseline-protection` とBaseline引数だけで既存問題を保護する。
+
+## 8. 生成再現性を検査する
+
+生成済み問題やIndexがある場合、生成前の対象File集合と正規化本文をSnapshotし、Generator実行後と比較する。
+
+```text
+python <skill-dir>/scripts/check_generated_reproducibility.py --root . --include "docs/questions/**/*.md" --include "docs/questions/index.md" -- python scripts/generate_questions.py
+```
+
+同梱ScriptはUTF-8 BOMとCRLF／LFを正規化し、PathをLocale非依存順で比較する。追加・削除・本文変更を失敗にする。BOMや改行だけの差は同一とみなすが、末尾空白や本文順序の差は隠さない。
+
+Windowsで成功しても、公開CIがLinuxならCI上でも同じ検査を実行する。Generator内のSortはCulture依存の既定順へ任せず、期待順または明示的Keyを使う。
+
+## 9. プロジェクト固有形式へ接続する
+
+既存のYAML、CSV、PowerShellデータ、Markdownなどから共通JSONLへ変換する小さな読み取り専用アダプターを作る。生成元が既に同等の項目を持つなら二重管理せず、検査時だけ書き出す。`format` やFamilyから `artifact_types`／`artifact_evidence` を合成してはならない。Learner-visible Stem／Optionから実物断片を抽出し、生成Markdown／HTMLにも同じ断片が残ることを照合する。抽出できなければ概念問題として空Listにするか、問題Sourceを修正する。
+
+既存検査で代用する場合、少なくとも次の対応を記録する。
+
+- 必須項目と選択肢別解説の完全性
+- Question Setと通常問題／模擬問題の分離
+- 資格Levelと公式根拠、Count Mode、標準件数またはユーザー指定、実数の一致
+- 問題形式、正答集合・順序・対応関係、Rendered Answerの一致
+- 公式Source、確認日、許可Host
+- 公式ガイドと公式Sample／Practiceの調査状態、全問のArtifact分類、検証済みArtifact問題が全体の60%以上であること、種類別最低数
+- 重複ID、問題文、解説
+- 高類似閾値と判定方法
+- 目標別件数
+- 正答位置・長さ・語彙による手掛かり
+- 全問意味Reviewと問題Hashの一致
+- 既存問題のBaseline Hashと、変更・削除理由の完全性
+- 別台帳・別Reviewerによる独立Review後の指摘状況
+- Windows／Linuxでの生成再現性
+
+検査出力、使用した閾値、対象件数、エラー・警告数を最終報告に含める。
