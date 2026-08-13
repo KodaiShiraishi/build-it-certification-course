@@ -18,7 +18,7 @@
 
 ## 2. 実務Artifactの分類
 
-問題が学習者へ直接提示して判断させる素材を `artifact_types` で分類する。一問が複数へ該当してよい。各宣言は `artifact_evidence` の同Typeと一対一で対応させ、Evidenceは `stem` または `option:<key>` 内に実在する文字列をExact sliceとして保持する。
+60%ポリシーへ算入する問題は、選択肢そのものに提示して正しい実装・設定・出力等を選ばせる候補を `artifact_types` で分類する。一問が複数へ該当してよい。各宣言Typeについて全 `option:<key>` に一件ずつ `artifact_evidence` を持ち、候補内に実在する文字列をExact sliceとして保持する。StemだけのArtifactは補助Scenarioとして使用できるが、60%の件数Evidenceにはしない。
 
 | 値 | 対象 |
 |---|---|
@@ -30,9 +30,11 @@
 | `logs_metrics` | Error、Log、Metric、Execution plan、Trace、Monitoring画面の値 |
 | `diagram_ui` | Architecture図、Topology、Console／UIの状態 |
 
-素材を本文に置いただけでArtifact問題と数えない。正答に到達するために、素材の具体的な行、Field、値、構造、差分を読む必要があることを条件にする。概念だけの問題は `artifact_types: []` と `artifact_evidence: []` を明示する。`format: code`、Family名、Filename、Stem中の「Codeを確認した」というProse、Generatorの分類関数は、学習者表示内の実物の代わりにならない。
+素材を本文に置いただけ、またはOptionの一部だけに置いただけでArtifact選択問題と数えない。全Optionが同じArtifact種別と技術粒度の実在可能な候補を持ち、具体的な行、Field、値、構造、呼出順、演算子、Identity境界、実行結果の差を読んで要件を満たす候補を決めることを条件にする。概念だけの問題、StemのCodeやLogを読んで自然文の原因名・Service名を答える問題は `artifact_types: []` と `artifact_evidence: []` にし、必要なら別の補助分類で追跡する。`format: code`、Family名、Filename、Stem中の「Codeを確認した」というProse、Generatorの分類関数は、選択肢内実物の代わりにならない。
 
-意味上の依存性はMetadataやCode fenceの存在だけでは証明できない。独立レビューでArtifact部分を一時的に隠し、残った本文と選択肢だけで正答を特定できないか確認する。本文が「違反行を除外して続行する」「devとprodでCatalogだけを変える」など、正答の動作をすでに言い換えている場合は削除テスト不合格とし、Artifact件数へ数えない。表に `correct`、`matches`、`expected answer`のような正答ラベルを置く問題も同様に扱う。
+各算入問題に `artifact_selection.task: select_correct_artifact`、要求Behavior／Result、全候補を覆う実物中の `decision_axes`、候補検証を保持する。候補検証は共通Fixture、Schema／Dry run、または入力からの導出結果を使い、検証Reference、候補別結果、検証済み正答集合を記録する。Code候補は正答・誤答を同じ実行可能またはStub化したFixtureへ通す。意味Reviewだけの自己申告を実行証拠にしない。
+
+意味上の依存性はMetadataやCode fenceの存在だけでは証明できない。独立レビューでOption Artifactを一時的に隠し、Stem、Optionラベル、周辺Proseだけで正答を特定できないか確認する。本文が「違反行を除外して続行する」「devとprodでCatalogだけを変える」など、正答の動作をすでに言い換えている場合は削除テスト不合格とし、Artifact件数へ数えない。表に `correct`、`matches`、`expected answer`のような正答ラベルを置く問題も同様に扱う。全候補の観測結果が同じ、差が識別子・Comment・表示値だけ、または要求Contractと候補差が結び付かない場合も不合格にする。
 
 ## 3. 資格ごとのArtifact policy
 
@@ -41,18 +43,18 @@
 | Objective | 公式Evidence | 問われる判断 | Artifact type | 最低問数 | 根拠 |
 |---|---|---|---|---:|---|
 
-通常問題集のArtifact問題総数は、検証済み `artifact_evidence` を持つ一意な問題数で全体の60%以上を共通下限とする。500問なら300問以上、1,000問なら600問以上であり、`ceil(total × 0.60)` で端数を切り上げる。複数Typeを持つ一問は種類別集計では各Typeへ一回ずつ数えるが、60%の分子では一問と数える。公式Sampleで実際に素材が提示される頻度、試験ガイドの動詞、想定実務経験、ユーザーの受験後Feedbackを根拠に、資格・Objective別のType配分と60%を超える最低数を設計する。
+通常問題集のArtifact問題総数は、全Optionの検証済み `artifact_evidence` と有効な `artifact_selection` を持つ一意な正しいArtifact候補選択問題で、全体の60%以上を共通下限とする。500問なら300問以上、1,000問なら600問以上であり、`ceil(total × 0.60)` で端数を切り上げる。Stem-only Artifact問題は分子へ入れない。複数Typeを持つ一問は種類別集計では各Typeへ一回ずつ数えるが、60%の分子では一問と数える。公式Sampleで実際に素材が提示される頻度、試験ガイドの動詞、想定実務経験、ユーザーの受験後Feedbackを根拠に、資格・Objective別のType配分と60%を超える最低数を設計する。
 
 公式Sampleの母数が少ない場合は、見かけの割合をそのまま全問題へ外挿しない。60%は公式出題率の推定ではなく、実務読解を十分に練習する教材品質の下限として扱い、その区別とEvidenceの不確実性を `calibration_note` に書く。ユーザーの領域別Scoreと教材習得状況が得られたら、単なる苦手分野ではなく、Coverage、Artifact密度、問題形式、受験言語の差を分けて再評価する。
 
 ## 4. Artifactを使う問題Pattern
 
 - **Code correctness**: API名、引数、呼出順、Return、Scope、Execution semanticsのいずれかが異なる、実在可能な近接Code片を比較させる。正解の完成Codeを本文へ先に表示し、その言い換えをOptionから選ばせない。
-- **Input → output**: 小さな入力表と期待出力を示し、Filter、Join、Aggregate、Window、NULL、重複、Schema変化を追わせる。
-- **Configuration／structured data**: 実在する設定形式を小さく保ち、階層、必須Field、型、参照関係、権限境界を判定させる。
-- **Troubleshooting**: ErrorやLogを示し、いきなり修正を選ばせず、最初に確認する観測情報、原因切り分け、修正、再検証の順を問う。
-- **Command／operation**: 実行場所、Credential、Context、Option、副作用、Rollbackを含めて選ばせる。
-- **Architecture／access boundary**: 利用主体、Account有無、Read／Write、Cloud／Region、Protocol、管理責任を明示して機能を選ばせる。
+- **Input → output**: Stemに小さな入力を示し、各Optionへ異なる出力表または変換Codeを提示して、Filter、Join、Aggregate、Window、NULL、重複、Schema変化を正しく反映する候補を選ばせる。
+- **Configuration／structured data**: 全Optionへ実在可能な設定候補を置き、階層、必須Field、型、参照関係、権限境界の差から正しい候補を選ばせる。
+- **Troubleshooting**: ErrorやLogをStemの説明だけにせず、全Optionへ診断Command、修正Configuration、または期待する検証結果をArtifact候補として提示し、観測、原因切り分け、修正、再検証の契約に合う候補を選ばせる。
+- **Command／operation**: 全OptionへCommand列を置き、実行場所、Credential、Context、Option、副作用、Rollback、fail-fastの差から正しい列を選ばせる。
+- **Architecture／access boundary**: 全OptionへDiagram／Policy／構成候補を置き、利用主体、Account有無、Read／Write、Cloud／Region、Protocol、管理責任の差から正しい候補を選ばせる。
 
 Code候補を完成した実装として提示する場合は、正解だけでなく全候補を対象言語のParser、Compiler、Linter、または製品固有の検証Commandへ通し、少なくとも構文として完全であることを確認する。先頭がMethod chainだけのFragment、Receiverや必須引数が省略された式、URLだけの文字列などを使う場合は、FragmentであることとReceiver、代入先、前後の実行Contextを問題内に明示する。誤答は偶発的な構文欠落ではなく、実在可能なAPI、引数、Field、Operator、型、実行Semanticsの差で作る。
 
@@ -96,11 +98,11 @@ Open responseの必須EvidenceとRubricは、`Yes`／`No`、`Not always`、正�
 
 主問題集の正答位置、Option長、語彙手掛かり検査が講義・LabのInline questionまで自動的に覆うと仮定しない。Inline questionの固定Inventoryを母集団として、形式別の正答位置、Correct／Incorrect語彙率、wrong-only item、実質的な長さ差を別に集計する。A/Bだけで全問を回す、C/Dが一度も正答にならない、または旧候補の説明がLabelだけ変わって残る状態を、候補本文とKeyed explanationのBinding検査で拒否する。
 
-公式Sampleまたは抽象化された受験観察がCode／Configurationの形を選ぶ形式を示す場合、十分な数の問題でOption自体に複数のCode／設定候補を提示する。全Optionへ同じ正解Codeを複製し、汎用的な`require_all`、`remediate`、`pass`のようなFlagだけを変えた問題はCode correctnessとして数えない。製品固有のAPI名、引数、JSON Field、Column、Operator、実行結果の差が正答を決めるようにする。
+60%へ算入するすべての問題で、Option自体に複数のArtifact候補を提示する。全Optionへ同じ正解Codeを複製し、汎用的な`require_all`、`remediate`、`pass`のようなFlagだけを変えた問題はCode correctnessとして数えない。製品固有のAPI名、引数、JSON Field、Column、Operator、Identity境界、実行結果の差が正答を決めるようにする。
 
 ## 5. ハンズオンを省略したい学習者への代替
 
-ユーザーが時間効率を優先してハンズオンを任意にしたい場合、演習成果を削除せず、Artifact問題へ変換する。
+ユーザーが時間効率を優先してハンズオンを任意にしたい場合、演習成果を削除せず、全選択肢の実装候補から正しいArtifactを選ばせる問題へ変換する。
 
 - 実行する代わりに、Code、Command、Configuration、入力、Log、出力を一つのScenarioとして読む。
 - 正常系だけでなく、意図的なError、観測結果、原因、修正後の結果まで一続きにする。
@@ -115,19 +117,45 @@ Open responseの必須EvidenceとRubricは、`Yes`／`No`、`Not always`、正�
 {
   "id": "Q-001",
   "artifact_types": ["code"],
-  "stem": "Inspect this code:\n```python\nresponse = glue.start_job_run(JobName=job_name)\nrun_id = response['JobRunId']\n```",
+  "stem": "Which implementation starts the named AWS Glue job and returns the new run ID?",
   "options": {
-    "A": "The returned run ID is retained.",
-    "B": "No job is started."
+    "A": "```python\nresponse = glue.start_job_run(JobName=job_name)\nreturn response['JobRunId']\n```",
+    "B": "```python\nresponse = glue.get_job_run(JobName=job_name, RunId=job_name)\nreturn response['JobRun']['Id']\n```"
   },
+  "correct": "A",
   "artifact_evidence": [
     {
       "type": "code",
-      "location": "stem",
-      "content": "```python\nresponse = glue.start_job_run(JobName=job_name)\nrun_id = response['JobRunId']\n```",
-      "decision_binding": "The start_job_run call and JobRunId lookup determine the result."
+      "location": "option:A",
+      "content": "```python\nresponse = glue.start_job_run(JobName=job_name)\nreturn response['JobRunId']\n```",
+      "decision_binding": "start_job_run creates a run and JobRunId is the required return value."
+    },
+    {
+      "type": "code",
+      "location": "option:B",
+      "content": "```python\nresponse = glue.get_job_run(JobName=job_name, RunId=job_name)\nreturn response['JobRun']['Id']\n```",
+      "decision_binding": "get_job_run reads an existing run and cannot create the required run."
     }
-  ]
+  ],
+  "artifact_selection": {
+    "task": "select_correct_artifact",
+    "requirement": "Start the named job and return the newly created run identifier.",
+    "decision_axes": [
+      {
+        "name": "AWS Glue operation",
+        "option_values": {"A": "start_job_run", "B": "get_job_run"}
+      }
+    ],
+    "validation": {
+      "method": "shared_fixture",
+      "reference": "tests/glue_start_job_candidates.py::test_candidates",
+      "validated_correct": ["A"],
+      "candidate_results": {
+        "A": "Records one start_job_run call and returns jr-123.",
+        "B": "Records no start_job_run call and attempts to read an existing run."
+      }
+    }
+  }
 }
 ```
 
@@ -176,24 +204,25 @@ python scripts/validate_question_bank.py questions.jsonl `
   --official-source-host vendor.example
 ```
 
-この検査は、公式Calibration Evidenceの記録、全問の明示的な `artifact_types` と `artifact_evidence`、Evidence内容が指定したStem／OptionにExact substringとして存在すること、Typeごとの最低限の構造、宣言とEvidenceの一対一対応、Artifact問題総数が `ceil(total × 0.60)` 以上であること、種類別最低数を検証する。複数Typeの一問は各Typeへ一回ずつ数えるため種類別合計は総問題数を超えてよいが、60%の分子では一問である。件数にはEvidence検証に合格したTypeだけを使う。
+この検査は、公式Calibration Evidenceの記録、全問の明示的な `artifact_types` と `artifact_evidence`、各宣言TypeのEvidenceが全Optionを覆いExact substringとして存在すること、Typeごとの最低限の構造、`artifact_selection` の要件・決定軸・候補検証・正答集合、Option Artifact選択問題総数が `ceil(total × 0.60)` 以上であること、種類別最低数を検証する。Stem location、候補不足、同一候補、候補結果差なし、検証済み正答と `correct` の不一致は0件扱いにする。複数Typeの一問は各Typeへ一回ずつ数えるため種類別合計は総問題数を超えてよいが、60%の分子では一問である。
 
-機械検査はArtifactの表示上の存在と構造を確認するGateであり、意味上の依存性やObjective fidelityを証明しない。生成後は各 `artifact_evidence.content` がLearner-visible Markdown／HTMLに残ることも照合し、Canonical JSONLだけが持つ非表示Metadataを表示Artifactと誤認しない。最終レビューでは全Objectiveを横断して削除テストを行い、さらにArtifactとOptionが公式Objectiveに対応する製品固有のAPI、設定、Data変化、実行結果、障害診断、または設計境界を実際に判断させるか確認する。汎用辞書の値Copy、YAML Slotの一対一転記、Trace文字列の完全一致だけで解ける問は、Artifactを消すと解けなくても製品Artifact件数へ数えない。正答条件を自然文で書いたCommentやCourse独自のAcceptance recordをCode、SQL、YAML、JSON Fenceへ包んだだけのものも、実装Artifactや実行結果として数えない。同じLog、Metric、Config、Codeの雛形をField名やAction文字列だけ変えて無関係なObjectiveへ回転させることも禁止する。ObjectiveとArtifact familyの組み合わせごとに、そのArtifactから導く判断がObjectiveの動詞と対象へ直接対応する根拠をReview台帳へ残す。確認した問題ID、Objective、判定、修正内容をReview台帳またはADRへ残す。テンプレート生成では、一つの失敗が大量複製されるため、Generatorの各問題Familyを少なくとも一度は確認する。
+機械検査は全Option Artifactの表示上の存在、構造、決定差分、候補検証記録を確認するGateであり、Reference先が実行された事実やObjective fidelityをMetadataだけで証明しない。生成後は各 `artifact_evidence.content` がLearner-visible Markdown／HTMLに残り、`artifact_selection.validation.reference` がローカル必須検査とCIで実行されることも照合する。Canonical JSONLだけが持つ非表示Metadataを表示Artifactや実行証拠と誤認しない。最終レビューでは全Objectiveを横断して削除テストを行い、さらにArtifact候補が公式Objectiveに対応する製品固有のAPI、設定、Data変化、実行結果、障害診断、または設計境界を実際に判断させるか確認する。汎用辞書の値Copy、YAML Slotの一対一転記、Trace文字列の完全一致だけで解ける問は、Artifactを消すと解けなくても製品Artifact件数へ数えない。正答条件を自然文で書いたCommentやCourse独自のAcceptance recordをCode、SQL、YAML、JSON Fenceへ包んだだけのものも、実装Artifactや実行結果として数えない。同じLog、Metric、Config、Codeの雛形をField名やAction文字列だけ変えて無関係なObjectiveへ回転させることも禁止する。ObjectiveとArtifact familyの組み合わせごとに、そのArtifactから導く判断がObjectiveの動詞と対象へ直接対応する根拠をReview台帳へ残す。確認した問題ID、Objective、判定、修正内容をReview台帳またはADRへ残す。テンプレート生成では、一つの失敗が大量複製されるため、Generatorの各問題Familyを少なくとも一度は確認する。
 
 ## 7. 完了条件
 
 - 現行公式ガイドと公式Sample／Practiceの調査状態、確認日、Access制約が残っている。
 - Loginが必要な公式問題をCodexが確認できない場合、ユーザーへ明示した記録がある。
 - Objective別にArtifact typeと最低数の根拠がある。
-- 検証済みArtifact問題の一意な件数が通常問題集全体の60%以上である。
-- 全問に `artifact_evidence` があり、宣言Typeと一対一で一致し、Evidence内容が解答前に見えるStem／Optionと生成Markdown／HTMLの両方に存在する。
-- Code、Configuration、Data、Log等が、飾りではなく正答判断に必要である。
-- Artifactを隠す削除テストで、本文とOptionだけから正答を特定できない。
+- 全Option Evidenceと `artifact_selection` の検証に合格した正しいArtifact候補選択問題の一意な件数が、通常問題集全体の60%以上である。
+- 算入問題は各宣言Typeについて全Optionの `artifact_evidence` を持ち、Evidence内容が解答前に見えるOptionと生成Markdown／HTMLの両方に存在する。Stem-only Artifactは算入していない。
+- 全候補のCode、Configuration、Data、Log等が同じ種別・粒度の実在可能な候補であり、要件を満たす正答を行・Field・Operator・値・関係・実行結果の差から選ばせる。
+- Option Artifactを隠す削除テストで、Stemと周辺Proseだけから正答を特定できない。
+- `artifact_selection` のDecision axisが候補内Exact sliceへ結び付き、共通Fixture／Schema／Dry run／導出検査の候補別結果と検証済み正答集合がある。Code候補は同じFixtureで実行されている。
 - ArtifactとOptionが公式Objectiveに対応する製品判断を測り、汎用的な値Copyや文字列一致だけの問題を製品Artifact件数へ数えていない。
 - 正答条件を述べるCourse独自CommentやAcceptance proseをFenceへ包み、Codeや設定の件数へ算入していない。
 - 一つの汎用Artifact familyを無関係なObjectiveへ回転させず、ObjectiveとFamilyの各組み合わせを意味レビューしている。
 - Code／設定の形を問う問題では、正解を本文へ先に表示せず、実在可能な近接候補のAPI、引数、Field、構造、呼出順、演算子を比較している。
 - 入力から出力、中間結果、Errorから診断順を追う問題が含まれる。
-- Label-only、非表示Evidence、構造のないProseを拒否するNegative fixtureが成功する。
+- Stem-only、Label-only、Option候補不足、同一候補、結果差なし、非表示Evidence、構造のないProseを拒否するNegative fixtureが成功する。
 - `--require-artifact-policy` が成功し、検証済みEvidenceから数えた実測数が最低数を満たす。
 - 公式問題と同一・再現と主張せず、一次資料から独自Scenarioを作っている。

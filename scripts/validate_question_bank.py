@@ -70,6 +70,12 @@ ARTIFACT_TYPES = {
     "diagram_ui",
 }
 MIN_ARTIFACT_QUESTION_RATIO = 0.60
+ARTIFACT_SELECTION_TASK = "select_correct_artifact"
+ARTIFACT_VALIDATION_METHODS = {
+    "shared_fixture",
+    "schema_or_dry_run",
+    "derived_result_check",
+}
 ARTIFACT_EVIDENCE_KINDS = {
     "exam_guide",
     "official_sample",
@@ -204,7 +210,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--targets", type=Path, help="JSON with total, course count policy, objective, question-type, difficulty, cognitive-type, and artifact targets")
     parser.add_argument("--require-metadata-targets", action="store_true", help="require allowed/count targets for question type, difficulty, and cognitive type")
     parser.add_argument("--require-course-count-policy", action="store_true", help="require question-set metadata and validate practice-bank level/count policy")
-    parser.add_argument("--require-artifact-policy", action="store_true", help="require official evidence, learner-visible artifact evidence, and at least 60% artifact questions")
+    parser.add_argument(
+        "--require-artifact-policy",
+        action="store_true",
+        help="require official evidence and at least 60% option-artifact selection questions",
+    )
     parser.add_argument("--review-ledger", type=Path, help="semantic CSV with id,status,reviewer,notes[,question_hash]")
     parser.add_argument("--independent-review-ledger", type=Path, help="independent review CSV with the same columns")
     parser.add_argument("--require-independent-review", action="store_true")
@@ -1142,7 +1152,7 @@ def _has_artifact_structure(artifact_type: str, content: str) -> bool:
 def validate_question_artifact_evidence(
     question: dict[str, Any], findings: list[Finding]
 ) -> set[str]:
-    """Return artifact types backed by exact learner-visible structural evidence."""
+    """Return types backed by validated artifact candidates in every option."""
     question_id = str(question.get("id", "?"))
     artifact_types = question.get("artifact_types")
     if not isinstance(artifact_types, list):
@@ -1176,8 +1186,8 @@ def validate_question_artifact_evidence(
         )
         return set()
 
-    evidence_types: list[str] = []
-    valid_evidence_types: set[str] = set()
+    evidence_pairs: list[tuple[str, str]] = []
+    valid_evidence_by_type: dict[str, dict[str, str]] = defaultdict(dict)
     for index, item in enumerate(evidence, start=1):
         label = f"{question_id}/artifact_evidence[{index}]"
         if not isinstance(item, dict):
@@ -1193,18 +1203,27 @@ def validate_question_artifact_evidence(
                 )
             )
             continue
-        evidence_types.append(artifact_type)
-
         location = item.get("location")
         if not isinstance(location, str) or _artifact_location_text(question, location) is None:
             findings.append(
                 Finding(
                     "ERROR",
                     "invalid-artifact-evidence-location",
-                    f"{label}.location must be 'stem' or 'option:<existing option key>'",
+                    f"{label}.location must be 'option:<existing option key>'",
                 )
             )
             continue
+        if not location.startswith("option:"):
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "artifact-evidence-location-not-option",
+                    f"{label}.location must point to an option; stem-only artifacts do not count toward the 60% policy",
+                )
+            )
+            continue
+        option_key = location.removeprefix("option:")
+        evidence_pairs.append((artifact_type, option_key))
         location_text = _artifact_location_text(question, location)
         content = item.get("content")
         if not isinstance(content, str) or not content.strip():
@@ -1238,20 +1257,287 @@ def validate_question_artifact_evidence(
                 )
             )
             continue
-        valid_evidence_types.add(artifact_type)
+        valid_evidence_by_type[artifact_type][option_key] = content
 
-    if len(evidence_types) != len(set(evidence_types)):
-        findings.append(Finding("ERROR", "duplicate-artifact-evidence-type", f"{question_id}: artifact_evidence contains duplicate types"))
+    if len(evidence_pairs) != len(set(evidence_pairs)):
+        findings.append(
+            Finding(
+                "ERROR",
+                "duplicate-artifact-evidence-location",
+                f"{question_id}: artifact_evidence contains duplicate type/location pairs",
+            )
+        )
     declared_valid_types = set(normalized_types) & ARTIFACT_TYPES
-    if set(evidence_types) != declared_valid_types:
+    evidence_type_set = {artifact_type for artifact_type, _ in evidence_pairs}
+    if evidence_type_set != declared_valid_types:
         findings.append(
             Finding(
                 "ERROR",
                 "artifact-evidence-type-mismatch",
-                f"{question_id}: artifact_types {sorted(declared_valid_types)} do not match artifact_evidence types {sorted(set(evidence_types))}",
+                f"{question_id}: artifact_types {sorted(declared_valid_types)} do not match artifact_evidence types {sorted(evidence_type_set)}",
             )
         )
-    return valid_evidence_types
+
+    if not declared_valid_types:
+        if evidence:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "unexpected-artifact-evidence",
+                    f"{question_id}: artifact_evidence must be [] when artifact_types is []",
+                )
+            )
+        if question.get("artifact_selection") is not None:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "unexpected-artifact-selection",
+                    f"{question_id}: artifact_selection is only valid for an option-artifact question",
+                )
+            )
+        return set()
+
+    options = question.get("options")
+    option_keys = {str(key) for key in options} if isinstance(options, dict) else set()
+    question_type = resolved_question_type(question)
+    if question_type not in {"single_choice", "multiple_response"}:
+        findings.append(
+            Finding(
+                "ERROR",
+                "artifact-selection-question-type",
+                f"{question_id}: the 60% option-artifact policy only counts single_choice or multiple_response questions",
+            )
+        )
+
+    complete_types: set[str] = set()
+    for artifact_type in sorted(declared_valid_types):
+        covered_keys = set(valid_evidence_by_type.get(artifact_type, {}))
+        missing_keys = sorted(option_keys - covered_keys)
+        extra_keys = sorted(covered_keys - option_keys)
+        if missing_keys or extra_keys:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "artifact-option-coverage-mismatch",
+                    f"{question_id}/{artifact_type}: every option must contain a validated candidate; missing {missing_keys}, extra {extra_keys}",
+                )
+            )
+            continue
+        normalized_candidates = {
+            normalize_exact_text(content)
+            for content in valid_evidence_by_type.get(artifact_type, {}).values()
+        }
+        if len(normalized_candidates) < 2:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "artifact-candidates-not-distinct",
+                    f"{question_id}/{artifact_type}: option artifacts are identical after normalization",
+                )
+            )
+            continue
+        complete_types.add(artifact_type)
+
+    selection = question.get("artifact_selection")
+    selection_valid = True
+    if not isinstance(selection, dict):
+        findings.append(
+            Finding(
+                "ERROR",
+                "missing-artifact-selection",
+                f"{question_id}: artifact_selection must prove that the learner selects the correct artifact candidate",
+            )
+        )
+        selection_valid = False
+    else:
+        if selection.get("task") != ARTIFACT_SELECTION_TASK:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "invalid-artifact-selection-task",
+                    f"{question_id}: artifact_selection.task must be {ARTIFACT_SELECTION_TASK!r}",
+                )
+            )
+            selection_valid = False
+        requirement = selection.get("requirement")
+        if not isinstance(requirement, str) or not requirement.strip():
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "missing-artifact-selection-requirement",
+                    f"{question_id}: artifact_selection.requirement must state the required behavior or result",
+                )
+            )
+            selection_valid = False
+
+        axes = selection.get("decision_axes")
+        has_distinct_axis = False
+        if not isinstance(axes, list) or not axes:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "missing-artifact-decision-axes",
+                    f"{question_id}: artifact_selection.decision_axes must identify exact option differences",
+                )
+            )
+            selection_valid = False
+        else:
+            for index, axis in enumerate(axes, start=1):
+                axis_label = f"{question_id}/artifact_selection.decision_axes[{index}]"
+                if not isinstance(axis, dict):
+                    findings.append(Finding("ERROR", "invalid-artifact-decision-axis", f"{axis_label} must be an object"))
+                    selection_valid = False
+                    continue
+                name = axis.get("name")
+                option_values = axis.get("option_values")
+                if not isinstance(name, str) or not name.strip():
+                    findings.append(Finding("ERROR", "invalid-artifact-decision-axis", f"{axis_label}.name must be non-empty text"))
+                    selection_valid = False
+                if not isinstance(option_values, dict) or {str(key) for key in option_values} != option_keys:
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "artifact-decision-axis-coverage",
+                            f"{axis_label}.option_values must contain every option key exactly once",
+                        )
+                    )
+                    selection_valid = False
+                    continue
+                normalized_values: set[str] = set()
+                for raw_key, raw_value in option_values.items():
+                    key = str(raw_key)
+                    if not isinstance(raw_value, str) or not raw_value.strip():
+                        findings.append(Finding("ERROR", "invalid-artifact-decision-axis", f"{axis_label}.option_values[{key!r}] must be non-empty text"))
+                        selection_valid = False
+                        continue
+                    candidate_artifacts = [
+                        candidates[key]
+                        for candidates in valid_evidence_by_type.values()
+                        if key in candidates
+                    ]
+                    if not any(raw_value in artifact for artifact in candidate_artifacts):
+                        findings.append(
+                            Finding(
+                                "ERROR",
+                                "artifact-decision-axis-not-visible",
+                                f"{axis_label}.option_values[{key!r}] is not an exact substring of option {key}'s validated artifact candidate",
+                            )
+                        )
+                        selection_valid = False
+                        continue
+                    normalized_values.add(normalize_exact_text(raw_value))
+                has_distinct_axis = has_distinct_axis or len(normalized_values) >= 2
+        if isinstance(axes, list) and axes and not has_distinct_axis:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "artifact-decision-axes-not-distinct",
+                    f"{question_id}: decision axes do not expose a substantive candidate difference",
+                )
+            )
+            selection_valid = False
+
+        validation = selection.get("validation")
+        if not isinstance(validation, dict):
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "missing-artifact-candidate-validation",
+                    f"{question_id}: artifact_selection.validation must record a shared candidate check",
+                )
+            )
+            selection_valid = False
+        else:
+            method = validation.get("method")
+            if method not in ARTIFACT_VALIDATION_METHODS:
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "invalid-artifact-validation-method",
+                        f"{question_id}: validation.method must be one of {sorted(ARTIFACT_VALIDATION_METHODS)}",
+                    )
+                )
+                selection_valid = False
+            if "code" in declared_valid_types and method != "shared_fixture":
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "code-artifact-requires-shared-fixture",
+                        f"{question_id}: code candidates must be checked by the same executable or stubbed fixture",
+                    )
+                )
+                selection_valid = False
+            reference = validation.get("reference")
+            if not isinstance(reference, str) or not reference.strip():
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "missing-artifact-validation-reference",
+                        f"{question_id}: validation.reference must identify the executed fixture, schema, dry run, or derivation check",
+                    )
+                )
+                selection_valid = False
+
+            correct = question.get("correct")
+            if isinstance(correct, str):
+                expected_correct = {correct}
+            elif isinstance(correct, list):
+                expected_correct = {str(key) for key in correct}
+            else:
+                expected_correct = set()
+            validated_correct = validation.get("validated_correct")
+            actual_validated = (
+                {str(key) for key in validated_correct}
+                if isinstance(validated_correct, list)
+                else set()
+            )
+            if actual_validated != expected_correct:
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "artifact-validated-correct-mismatch",
+                        f"{question_id}: validation.validated_correct {sorted(actual_validated)} does not match keyed correct {sorted(expected_correct)}",
+                    )
+                )
+                selection_valid = False
+
+            candidate_results = validation.get("candidate_results")
+            if not isinstance(candidate_results, dict) or {str(key) for key in candidate_results} != option_keys:
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "artifact-candidate-result-coverage",
+                        f"{question_id}: validation.candidate_results must contain every option key exactly once",
+                    )
+                )
+                selection_valid = False
+            else:
+                normalized_results: set[str] = set()
+                for raw_key, result in candidate_results.items():
+                    if not isinstance(result, str) or not result.strip():
+                        findings.append(
+                            Finding(
+                                "ERROR",
+                                "invalid-artifact-candidate-result",
+                                f"{question_id}: candidate result for {str(raw_key)!r} must be non-empty text",
+                            )
+                        )
+                        selection_valid = False
+                    else:
+                        normalized_results.add(normalize_exact_text(result))
+                if len(normalized_results) < 2:
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "artifact-candidate-results-not-distinct",
+                            f"{question_id}: candidate validation reports no meaningful behavioral or result difference",
+                        )
+                    )
+                    selection_valid = False
+
+    if question_type not in {"single_choice", "multiple_response"} or not selection_valid:
+        return set()
+    return complete_types
 
 
 def validate_artifact_policy(
@@ -1435,7 +1721,7 @@ def validate_artifact_policy(
             Finding(
                 "ERROR",
                 "artifact-question-count-below-minimum",
-                f"artifact questions: minimum {effective_minimum} "
+                f"option-artifact selection questions: minimum {effective_minimum} "
                 f"({MIN_ARTIFACT_QUESTION_RATIO:.0%} global floor), found {questions_with_artifacts}",
             )
         )

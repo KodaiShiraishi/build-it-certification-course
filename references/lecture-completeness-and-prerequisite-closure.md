@@ -59,7 +59,7 @@
 - Serviceカテゴリは親カテゴリを持たない第一級カテゴリとし、学習者がHeader、Category tab、または同等の上部Course navigationから直接開けるようにする。
 - Serviceカテゴリ内に、公式範囲と正規AssessmentのStem・全候補で使う全Serviceまたは主要機能の正規Entryを置く。正答候補だけを抽出せず、学習者が比較して退けるDistractor Serviceも含める。各Entryは上記11 DimensionをService固有の包括的講義で満たす。
 - 一枚のhandbook、名前一覧、比較表、外部LinkだけをCurriculum unitにしない。複数Serviceを一ページへまとめる場合もUnit別Evidenceと固定Anchorを保持する。
-- 各ページ内Service unitは対応する包括的Curriculum unitを参照する。各Assessmentは同じServiceについて、包括的Curriculum linkとScenario固有のページ内Service requirementの両方を持つ。
+- 各Assessmentは必要な包括的Curriculum unitを参照する。Domain／Task講義は現在のScenarioに必要なServiceの責務とMechanismを該当本文で説明するが、ページ末尾へ包括的Curriculumを複製しない。
 - Strict build後は全生成HTMLで上部Serviceカテゴリ、順序、Landing link、Active stateを検査する。Source ManifestだけでHeader表示を証明しない。
 
 #### 固有Service encyclopedia entry契約
@@ -84,16 +84,15 @@
 - fenced／inline code、Command、Configuration、URL、HTML属性、Markdown Link destinationは対象外にし、raw文字列置換で壊さない。
 - Manifestの自己申告だけで完了せず、Source Markdownとstrict build後の全生成HTMLで、裸alias、誤Link、Anchor欠落、重複IDを検査する。
 
-#### 講義内Serviceセクション契約
+#### 通常講義でのService説明契約
 
-すべての正規講義ページに、確定した教材言語で学習者に見えるServiceセクションを置く。Cloud以外の資格では、試験で独立した動作・設定・障害境界を問う主要製品機能またはComponentをService相当として扱う。
+通常のDomain／Task講義では、現在のScenarioを理解するために必要なServiceまたは主要機能の役割、Mechanism、設定、Failure、観測、Integrationを、それが必要な本文位置で説明する。Cloud以外の資格では、試験で独立した動作・設定・障害境界を問う主要製品機能またはComponentをService相当として扱う。
 
 - 正規Sourceから全Lecture IDとPathのInventoryを生成し、Manifestの講義集合と完全一致させる。
-- 各LectureはServiceセクションの正確な見出し、Learner-visible Evidence、そこに属するService unit IDを持つ。
-- 各Service unitは所属Lectureを一つ持ち、11個すべてのDimension EvidenceをそのLectureのServiceセクション内に置く。
-- 同じServiceを複数講義で使う場合、講義ごとのService unitとして、そのScenarioで必要な仕組みと責務境界を各セクション内で教える。別講義の説明を既読前提にして現在のセクションを名前とLinkだけにしない。
-- Course-wide Service handbook、用語集、外部Documentationは補助に使えるが、講義内セクションを置き換えない。
-- 見出し、Service名、比較表、Architecture Diagram、Metadata、Dimensionの自己申告だけをEvidenceにしない。
+- 上部Service curriculumの固有Entryが11 Dimensionを包括的に教え、各Assessmentが必要EntryへBindingされることを必須にする。
+- 通常講義の末尾へ `AWS services in this lecture`、`Services used in this lecture` 等のService一覧や11 Dimensionの定型再掲を標準配置しない。既存の重複記述は内容を失わない範囲で削除する。
+- 同じServiceを複数講義で使う場合も、現在のScenarioで必要な仕組みと責務境界を該当本文へ組み込み、名前とLinkだけで済ませない。一方、Service自体の包括的プロフィールは上部Curriculumへ一元化する。
+- 見出し名を一律禁止する機械Gateは設けない。Generatorが末尾の重複Serviceセクションを再生成すると実証できた場合だけ、生成元を修正し回帰検査を追加する。
 
 ### Artifact
 
@@ -124,7 +123,7 @@ Manifestには最低限、次を保持する。
 
 - `entry_contract`: 入口で仮定する知識、根拠、下位資格仮定の明示的承認
 - `learning_units`: Unit ID、Kind、導入順、Subject、必須DimensionごとのLearner-visible Evidence
-- `lecture_policy` と `lectures`: 正規講義数、Lecture ID、Path、導入順、Serviceセクション見出し、所属Service unit、Exact Evidence
+- `lectures`: 必要な場合の正規講義数、Lecture ID、Path、導入順
 - `service_curriculum_policy`、`navigation_categories`、`service_curriculum`: 上部Serviceカテゴリ、Category順、Landing／Page path、比較・Navigation用Curriculum unit、全11 Dimension Evidence
 - `service_entries`: 公式範囲とAssessment候補の固有Service Inventory、正式名称、Kind、所属Curriculum unit、Path、見出し、Anchor、Landing index evidence、導入順、Entry内の全11 Dimension Evidence
 - `assessments`: 全問題ID、出現順、必要Unit、Service、Artifact Type、Integration Pattern、関連講義
@@ -148,10 +147,6 @@ Manifestの形は次のようにする。これはSchemaの抜粋であり、実
       }
     ],
     "assumed_certifications": []
-  },
-  "lecture_policy": {
-    "expected_count": 1,
-    "require_service_sections": true
   },
   "service_curriculum_policy": {
     "require_top_level_category": true,
@@ -202,32 +197,16 @@ Manifestの形は次のようにする。これはSchemaの抜粋であり、実
       "evidence": []
     }
   ],
-  "lectures": [
-    {
-      "id": "lecture.object-storage",
-      "path": "lectures/object-storage.md",
-      "sequence": 10,
-      "service_section": {
-        "heading": "## Services",
-        "service_unit_ids": ["service.object-storage"],
-        "evidence": {
-          "path": "lectures/object-storage.md",
-          "content": "## Services\nObject Storage solves ..."
-        }
-      }
-    }
-  ],
   "learning_units": [
     {
       "id": "service.object-storage",
       "kind": "service",
       "subject": "Object Storage",
-      "lecture_id": "lecture.object-storage",
       "curriculum_unit_id": "curriculum.object-storage",
-      "sequence": 20,
+      "sequence": 12,
       "evidence": [
         {
-          "path": "lectures/object-storage.md",
+          "path": "services/object-storage.md",
           "content": "Object storage solves ...",
           "dimensions": ["purpose"]
         }
@@ -265,8 +244,6 @@ python scripts/validate_learning_contract.py \
   --content-root docs \
   --question-jsonl data/questions.jsonl \
   --require-assessment-inventory \
-  --lecture-jsonl data/lectures.jsonl \
-  --require-service-sections \
   --navigation-jsonl data/navigation.jsonl \
   --require-service-curriculum \
   --service-entry-jsonl data/service-entries.jsonl \
@@ -274,7 +251,7 @@ python scripts/validate_learning_contract.py \
   --require-service-mention-links
 ```
 
-この共通Commandでは `--require-service-curriculum`／`--navigation-jsonl` と `--require-service-sections`／`--lecture-jsonl` を同じReleaseで両方必須にする。上部Navigation専用Validatorや生成HTML検査は追加Gateであり、包括的Curriculumとページ内Scenario適用の二層Bindingを検査する共通Commandの代替ではない。
+この共通Commandでは `--require-service-curriculum`／`--navigation-jsonl`、固有Service Entry、Service表記Linkを必須にする。`--require-service-sections`／`--lecture-jsonl` は、ユーザーまたはプロジェクト仕様が講義内Serviceセクションを明示的に要求する場合だけ追加する。上部Navigation専用Validatorや生成HTML検査は追加Gateであり、包括的Curriculumの代替ではない。
 
 - Entry contractにない知識を暗黙に仮定している
 - 明示的なユーザー承認なしに下位資格取得を仮定している
@@ -295,13 +272,10 @@ python scripts/validate_learning_contract.py \
 - 講義またはAssessmentのStem、全候補、正答・誤答解説にaliasが裸文字で残る、あるいはLink先が宣言EntryのPath／Anchorと一致しない
 - Services Landing、Family先頭、外部Documentation、別EntryへのLinkで固有Entryへの直接Linkを代用する
 - 長いaliasの内部を短いaliasとして二重処理する、またはCode、URL、Link destinationをProseとして誤Linkする
-- ページ内Service unitまたはAssessmentが対応する包括的Service curriculum unitへBindingされていない
-- 正規講義InventoryとManifestのLecture IDまたはPathが一致しない
-- 講義ページにLearner-visible Serviceセクションがない
-- Service unitが講義のServiceセクションに列挙されていない
-- Service DimensionのEvidenceがServiceセクション外、別冊handbook、または別講義にある
+- Assessmentが対応する包括的Service curriculum unitへBindingされていない
+- 正規講義Inventoryを使用する場合にManifestのLecture IDまたはPathが一致しない
 
-合格率は100%とする。60% Artifact問題ポリシーは「問題側にArtifactを含める割合」であり、講義側の前提閉包を60%でよいとする規則ではない。問題で実際に要求するService、Artifact、Integrationはすべて先に教える。
+合格率は100%とする。60% Artifact問題ポリシーは「全選択肢のArtifact候補から正しい候補を選ばせる問題の割合」であり、StemへArtifactを置く割合でも、講義側の前提閉包を60%でよいとする規則でもない。問題で実際に要求するService、Artifact、Integrationはすべて先に教える。
 
 ## 6. Negative fixtureと意味Review
 
@@ -323,9 +297,8 @@ python scripts/validate_learning_contract.py \
 - 正答候補のServiceだけがEntryへBindingされ、Distractor Serviceが未講義である
 - 講義の`EKS`が裸文字、問題StemだけLink済みでOptionまたは誤答解説の`EKS`が裸文字、または`EKS`がServices Landing／外部DocumentationへだけLinkされている
 - 二つのEntryへ同じaliasを割り当てる、`Amazon EKS`内の`EKS`だけを処理する、またはCode fence内のaliasを未Linkとして誤検出する
-- 包括的Service講義はあるが、ページ内Service unitやAssessmentからBindingされていない
-- 全Service Dimensionは別冊handbookにあるが、各講義ページのServiceセクションがない
-- Serviceセクション見出しとService名はあるが、Dimension Evidenceが見出しの外にある
+- 包括的Service講義はあるが、AssessmentからBindingされていない
+- 通常講義の末尾へ同じ `Services in this lecture` 一覧・定型プロフィールをGeneratorが全ページへ複製している
 
 機械Gateは、宣言された関係とExact Evidenceの存在を検査する。説明が技術的に正しく、Dimensionを本当に教えているか、問題のRequirement列挙が完全かは意味Reviewで確認する。独立ReviewにはManifestだけでなく、正規問題、Learner-visible講義、Artifact実物を渡す。
 

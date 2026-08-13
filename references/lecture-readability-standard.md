@@ -73,13 +73,11 @@ IT資格講義では、必要に応じて次を一つの短い流れで説明す
 - [ ] 処理順または責務の境界
 - [ ] 比較・トレードオフ
 - [ ] 試験または実務での判断ポイント
-- [ ] 確定した教材言語のServiceセクションがあり、その講義で使う製品Serviceまたは主要機能を名前の列挙ではなく仕組みから説明している
+- [ ] その講義で使う製品Serviceまたは主要機能を、必要な本文位置で名前の列挙ではなく仕組みから説明している
 
 囲み、表、箇条書きが存在するだけでは合格にしない。本文を順に読んで、未説明語なしに因果関係を再現できるかを判定する。
 
-Serviceセクションは別冊handbookへのリンクや「この講義で使うService」の一覧だけで済ませない。設計判断へ進む前に、その講義で使う各Serviceの役割、内部処理、設定、Security、障害、観測、Cost／Performance、代替、連携、具体例を本文として教える。講義をまたいで同じServiceを再利用する場合も、現在のScenarioで必要なMechanismと責務境界を現在の講義内で再構成し、既知であることを暗黙に仮定しない。
-
-上部Service curriculumと本文内Serviceセクションは役割を分ける。上部CurriculumではService自体を入口から体系的に教え、本文内セクションでは現在のScenarioへ適用する。どちらか一方へのLinkだけで他方の説明を省略せず、初学者は上部から順に、経験者は必要なServiceまたはDomain講義へ直接移動できるようにする。
+通常講義の末尾へ `AWS services in this lecture`、`Services used in this lecture` 等の一覧・要約セクションを標準配置しない。Service自体の包括的な目的、構成、設定、Security、障害、観測、Cost／Performance、代替、連携、具体例は上部Service curriculumの固有Entryで教える。通常講義では現在のScenarioに必要なMechanismと責務境界を該当本文へ自然に組み込み、末尾で同じ定型説明を再掲しない。既存の末尾重複記述は削除するが、有益なScenario固有の説明まで失わない。見出し名の一律禁止Gateは作らず、Generatorが重複を再生成すると確認した場合だけ生成元の回帰検査を追加する。
 
 上部Curriculumの固有Service Entryは、用語集のように `Service名 → 一言でいうと何か` から始める。ただし用語集の短い定義で終えず、解決する問題、構成要素と処理順、設定とSecurity、障害時の症状と観測、Cost／Performance、代替、Integration、具体的な設計例まで同じEntry内で説明する。Familyの導入文を読まないと意味が成立する書き方や、名前一覧の後にFamily共通の11見出しを置く構成を合格にしない。
 

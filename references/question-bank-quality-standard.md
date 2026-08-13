@@ -37,7 +37,7 @@
 - 模擬試験と通常問題を別々に管理し、上表の500問または1,000問へ模擬試験の設問を加算しない。
 - 「10倍」などの量的目標は、同じ題意の言い換えで埋めず、目標、状況、制約、失敗モード、判断軸を変える。
 - 難易度を知識再生、単一概念適用、複数概念統合に分ける。
-- 現行の公式Sample／Practiceを確認し、検証済みArtifact問題を通常問題集全体の60%以上にしたうえで、Code、Command、Configuration、Structured data、入力・出力表、Log／Metric、図／UIの種類別最低数を設計する。公開されていない、Loginが必要、旧版である場合もその状態を記録する。60%は公式出題率の主張ではなく教材品質の下限として記録する。
+- 現行の公式Sample／Practiceを確認し、全選択肢にArtifact候補があり要件を満たす正しい候補を選ばせる検証済みOption Artifact問題を、通常問題集全体の60%以上にする。そのうえでCode、Command、Configuration、Structured data、入力・出力表、Log／Metric、図／UIの種類別最低数を設計する。Stem-only Artifact問題は60%へ数えない。公開されていない、Loginが必要、旧版である場合もその状態を記録する。60%は公式出題率の主張ではなく教材品質の下限として記録する。
 
 ## 2. 問題文を作る
 
@@ -47,7 +47,7 @@
 - 否定形を乱用せず、使う場合は見落としにくくする。
 - 製品仕様に依存する正答は、公式ドキュメントと対象バージョンを確認する。
 - 本文の一文をそのまま探すだけで解ける問題に偏らせない。
-- Codeや設定を出す問題では、そのArtifactの行、Field、値、構造、実行結果が正答判断に必要であることを確認する。飾りとしてCode blockを置いただけの問題をArtifact問題に数えない。`format`、Family、Filename、説明文、`artifact_types` の自己申告を実物の代用にせず、各TypeをStem／Option内のExact learner-visible sliceと `decision_binding` を持つ `artifact_evidence` へ対応付ける。
+- 60%へ数えるCodeや設定の問題では、Stemに要件と必要な前提だけを置き、全選択肢へ同じArtifact種別・粒度の実在可能な候補を提示する。各宣言Typeを全 `option:<key>` 内のExact learner-visible sliceと候補固有の `decision_binding` を持つ `artifact_evidence` へ対応付ける。StemだけのCode block、Optionの一部だけのArtifact、`format`、Family、Filename、説明文、`artifact_types` の自己申告を件数へ数えない。
 - Data変換では入力と期待出力を示し、Schema、行数、値、NULL、重複、集計粒度のどれが変わるかを追わせる。診断ではError直後の修正暗記ではなく、観測、原因切り分け、修正、再検証の順を問う。
 - Stemと補足条件にService正式名または正規aliasが現れる場合、表記そのものを包括的Service Entryの固定Anchorへ直接Linkする。関連Service一覧、Services Landing、外部DocumentationだけへのLinkで代用しない。
 
@@ -61,6 +61,8 @@
 - 選択肢順や正答位置の偏りを検査する。
 - 問題単体だけでなく全体で、正答の文字数、句読点、条件節、製品名、極端語、断定の強さがCorrect／Incorrectと相関していないか検査する。
 - 正答・誤答を問わず、全Option内のService正式名・正規aliasを対応Entryへ直接Linkする。正答候補だけがLinkを持つこと自体を正答手掛かりにしない。
+- 60%へ算入する問題は、全Optionに同じArtifact種別の候補を置き、API名、引数、Field、構造、呼出順、演算子、Identity境界、出力の決定差分を候補内Exact sliceとして記録する。候補が似て見えるだけ、正答だけが完成形、差が識別子・Comment・表示値だけ、または全候補の観測結果が同じ問題を算入しない。
+- `artifact_selection` に `select_correct_artifact`、要求Behavior／Result、全Optionを覆うDecision axis、共通Fixture／Schema／Dry run／導出検査のReference、候補別結果、検証済み正答集合を持たせる。Code候補は同じ実行可能またはStub化したFixtureへ通し、検証済み正答集合を正規 `correct` と一致させる。
 
 ## 4. 解説を書く
 
@@ -96,6 +98,7 @@
 - 仕様確認元となる公式Sourceと確認日
 - 生成済み表示から読んだ正答を照合する場合のRendered Answer
 - 正答判断に必要な実務Artifactの分類。概念問題も空Listとして明示する `artifact_types`
+- 60%へ算入する問題の全Option Exact slice、候補固有Binding、要求、Decision axis、候補検証Reference、候補別結果、検証済み正答集合を保持する `artifact_evidence` と `artifact_selection`
 - Stem、全Option、正答・誤答解説へ出力するService表記と、正式名称・略称をEntryへ解決する正規alias情報
 
 関連講義へのLinkと、正答の根拠となる一次情報Sourceを別Fieldで保持する。生成時に、欠落、選択肢と解説の対応ずれ、Source不足、Rendered Answerとの不一致、正答位置、重複ID、短すぎる解説、同一解説を検出する。共通の書き出し形式、既定閾値、レビュー記録は [question-bank-validation-procedure.md](question-bank-validation-procedure.md) に従う。
@@ -115,7 +118,7 @@
 - 正答と解説の対応
 - 完全一致と高類似の問題・選択肢・解説
 - 正答位置、問題形式、領域、難易度、思考タイプの分布
-- 公式Evidence、全問のArtifact分類、検証済みArtifact問題が全体の60%以上であること、種類別最低数
+- 公式Evidence、全問のOption Artifact分類、全候補Evidence・決定差分・候補検証に合格したArtifact選択問題が全体の60%以上であること、種類別最低数
 - 正答の長さや語彙による手掛かり
 - 禁止された定型文、短すぎる説明、未置換プレースホルダー
 
@@ -153,7 +156,7 @@ BlockerとMajorは必ず0件にする。Minorは原則修正し、残す場合�
 - [ ] Question Set、資格Levelと根拠、Count Mode、標準件数またはユーザー指定を記録し、機械検査が通る
 - [ ] 公式試験目標の空白がない
 - [ ] 現行公式ガイドと公式Sample／Practiceの調査状態、確認日、Access制約が記録されている
-- [ ] 全問に `artifact_types` と `artifact_evidence` があり、宣言TypeとLearner-visible Exact sliceが一致し、検証済みEvidenceを持つ一意なArtifact問題が通常問題集全体の60%以上で、種類別最低数が公式Evidenceに基づいて一致する
+- [ ] 全問に `artifact_types` と `artifact_evidence` があり、60%へ算入する問は全OptionのExact slice、候補固有Binding、有効な `artifact_selection`、共通検証済み正答集合を持つ。これらに合格した一意なArtifact候補選択問題が通常問題集全体の60%以上で、Stem-only問題を含めず、種類別最低数が公式Evidenceに基づいて一致する
 - [ ] 全問の構造検査が通る
 - [ ] 公式試験の問題形式と形式別件数が一致する
 - [ ] 公式Source、確認日、Rendered Answerの照合が通る

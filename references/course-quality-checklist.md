@@ -76,17 +76,18 @@
 - [ ] 正規問題Sourceの全Question IDを学習契約Manifestへ出力し、ManifestのAssessment ID集合・件数と完全一致している
 - [ ] 各問題が要求するFoundation、Service、Artifact Type、Integration Pattern、関連講義を列挙し、問題より前のLearning unitへ100%閉じている。問題で正答に必要な基礎知識を初出させていない
 - [ ] 問題に登場する各Serviceについて、目的、構成要素、Mechanism、設定、Security、Reliability／Failure、Observability、Cost／Performance、代替、Integration、Worked exampleをService固有のLearner-visible本文で教えている
-- [ ] 正規講義Inventoryの全Lecture ID／PathがManifestと一致し、全講義ページに確定した教材言語のLearner-visible Serviceセクションがある
-- [ ] 各講義のServiceセクションが、その講義で使うServiceまたは主要機能をService unitとして列挙し、全11 DimensionのExact Evidenceをセクション内に持つ。別冊handbook、用語集、外部Link、Service名、比較表だけで代用していない
-- [ ] 各ページ内Service unitが対応する包括的Curriculum unitを参照し、各Assessmentが同じServiceについて包括的 `service_curriculum_links` とScenario固有のService requirementの両方を持つ
+- [ ] 正規講義Inventoryを使用する場合、全Lecture ID／PathがManifestと一致している
+- [ ] Domain／Task講義では、現在のScenarioに必要なServiceの責務、Mechanism、設定、Failure、観測、Integrationを該当本文で説明し、名前やLinkだけにしていない
+- [ ] 通常講義末尾の `AWS services in this lecture`、`Services used in this lecture` 等の一覧・11 Dimension定型再掲を標準配置せず、既存の重複記述を内容を失わない範囲で削除している。見出し名を一律禁止するGateは作らず、Generatorの再生成が確認できた場合だけ回帰検査を追加している
+- [ ] 各Assessmentが必要な包括的Service unitを `service_curriculum_links` で参照している
 - [ ] Manifestの `service_entries` が独立Service-entry Inventoryと完全一致し、全Entryの11 Dimension Evidence、Family所属、固定Anchor、Landing index evidence、導入順を検査している。各Assessmentの `named_services` と `service_entry_links` が一致する
 - [ ] 各Service Entryに正式名称を含む一意な `aliases` があり、正規InventoryとManifestが一致する。同一aliasが複数Entryへ解決せず、重なるaliasは最長一致で処理される
 - [ ] 全正規講義と全learner-visible Assessment PageのStem、全Option、正答・誤答解説に現れるService正式名・正規aliasが、表記そのものから対応Entryの宣言Pathと固定Anchorへ直接Linkされ、裸alias、Landing／Family先頭／外部Documentation／別Entryへの誤Linkが0件である
 - [ ] 問題に登場する各Artifact Typeについて、構造、Field／行／矢印／Operatorの意味、正常例、失敗例、判断Evidenceを同じGrammarのLearner-visible実物で先に教えている
 - [ ] 複数Serviceを組み合わせる問題について、各Serviceの責務、Request／Event、Identity／Policy、Data／State、Failure／Recovery、ObservabilityのFlowをIntegration講義で追える
 - [ ] 各必須DimensionのEvidenceが問題前に読めるMarkdownまたは生成HTMLのExact sliceであり、Filename、見出し、Metadata、Tag、汎用文の自己申告だけで合格させていない
-- [ ] `scripts/validate_learning_contract.py --require-assessment-inventory --require-service-sections --lecture-jsonl <lecture-inventory> --require-service-curriculum --navigation-jsonl <navigation-inventory> --require-named-service-entries --service-entry-jsonl <service-entry-inventory> --require-service-mention-links` または同等以上のGateが成功し、Assessment／Lecture／Navigation／Service-entry inventory、alias、上部Serviceカテゴリ順、包括的Curriculum、固有Service Entry、二層Binding、Service section、Service表記Link、Artifact／Integration coverage、Exact learner-visible evidenceをBlockerとして検査している
-- [ ] Service説明不足、固有Entry欠落、名前一覧、一文定義、Family Evidence流用、名前差し替えTemplate、Anchor／Landing Link欠落、Assessment候補Service未Binding、alias欠落・衝突、講義／Stem／Option／解説の裸alias、誤Entry／Landing／外部DocumentationへのLink、最長一致違反、Code／URLの誤検出、上部Serviceカテゴリ欠落・下位化・後置、包括的CurriculumのDimension欠落・カテゴリ外配置・Assessment未Binding、講義内Serviceセクション欠落、Service Evidenceのセクション外配置、Artifact読解不足、Integration flow不足、Evidence非表示、Question ID除外、未承認の下位資格仮定のNegative fixtureが失敗する
+- [ ] `scripts/validate_learning_contract.py --require-assessment-inventory --require-service-curriculum --navigation-jsonl <navigation-inventory> --require-named-service-entries --service-entry-jsonl <service-entry-inventory> --require-service-mention-links` または同等以上のGateが成功し、Assessment／Navigation／Service-entry inventory、alias、上部Serviceカテゴリ順、包括的Curriculum、固有Service Entry、Service表記Link、Artifact／Integration coverage、Exact learner-visible evidenceをBlockerとして検査している。`--require-service-sections` は明示的なプロジェクト要件がある場合だけ追加している
+- [ ] Service説明不足、固有Entry欠落、名前一覧、一文定義、Family Evidence流用、名前差し替えTemplate、Anchor／Landing Link欠落、Assessment候補Service未Binding、alias欠落・衝突、講義／Stem／Option／解説の裸alias、誤Entry／Landing／外部DocumentationへのLink、最長一致違反、Code／URLの誤検出、上部Serviceカテゴリ欠落・下位化・後置、包括的CurriculumのDimension欠落・カテゴリ外配置・Assessment未Binding、Artifact読解不足、Integration flow不足、Evidence非表示、Question ID除外、未承認の下位資格仮定のNegative fixtureが失敗する
 - [ ] 機械Gateとは別に、Requirement列挙の完全性、説明の技術的妥当性、前提の飛躍、Service名だけの説明、飾りのArtifactがないことを意味Reviewしている
 
 ## 4. 用語集と導線
@@ -111,7 +112,7 @@
 - [ ] Data保持・削除・Model学習・Service改善・人手Review・Region条件を確認し、非機密の合成または架空Dataを使っている
 - [ ] Credentialを教材・Git・Logへ残さず、最小権限・短期Credentialと終了時の失効を扱っている
 - [ ] 利用不能または利用拒否時に、同じ学習目標を測れる無料の代替演習と未検証範囲がある
-- [ ] ハンズオンを任意にした場合、Code、設定、入力、Log、Error、出力を読むArtifact問題で観測と判断を補い、完全には代替できない実環境固有の操作を明示している
+- [ ] ハンズオンを任意にした場合、Code、設定、入力、Log、Error、出力の全選択肢候補から正しいArtifactを選ぶ問題で観測と判断を補い、完全には代替できない実環境固有の操作を明示している
 
 ## 6. 通常問題と模擬試験
 
@@ -130,12 +131,14 @@
 - [ ] `--require-course-count-policy` でQuestion Set、Levelと根拠、Count Mode、標準件数またはユーザー指定と実数の一致を検査している
 - [ ] 公式ガイドの問題形式と、Single Choice／Multiple Response／Ordering／Matchingなどの形式別件数・Response表現が一致している
 - [ ] 試験領域、難易度、思考タイプの分布を設計している
-- [ ] 検証済みArtifact問題を通常問題集全体の60%以上にし、現行公式Evidenceから種類別最低数を設計し、全問の `artifact_types` とLearner-visible `artifact_evidence` を `--require-artifact-policy` で検査している
-- [ ] Artifact件数を `format`、Family、Filename、説明文、自己申告Labelから数えず、検証済みEvidenceだけを集計し、生成Markdown／HTMLにもExact Evidenceが残ることを照合している
+- [ ] 全OptionにArtifact候補があり、要件を満たす正しい候補を選ばせる検証済み問題を通常問題集全体の60%以上にし、現行公式Evidenceから種類別最低数を設計している。Stem-only Artifact問題を60%へ数えていない
+- [ ] 算入問題の全宣言Typeについて全 `option:<key>` のExact `artifact_evidence`、候補固有Binding、有効な `artifact_selection`、共通Fixture／Schema／Dry run／導出検査の候補別結果と検証済み正答集合を `--require-artifact-policy` で検査している
+- [ ] Artifact件数を `format`、Family、Filename、説明文、自己申告Label、Stem Artifact、Code fenceの見た目から数えず、全候補Coverageと選択契約に合格したEvidenceだけを集計し、生成Markdown／HTMLにも全OptionのExact Evidenceが残ることを照合している
 - [ ] 構築、開発、Data変換、診断、運用を測る資格では、Code、Command、Configuration、Structured data、入力・出力表、Log／Metric等が正答判断に必要な問題を十分に含めている
-- [ ] 全ObjectiveとGenerator familyを横断してArtifact削除テストを行い、Artifactを隠しても本文やOptionの手掛かりだけで解ける問をArtifact件数から除外または修正している
+- [ ] 全ObjectiveとGenerator familyを横断してOption Artifact削除テストを行い、候補Artifactを隠してもStem、Option label、周辺Proseの手掛かりだけで解ける問をArtifact件数から除外または修正している
 - [ ] 削除テスト合格だけで完了せず、ArtifactとOptionが公式Objectiveに対応する製品固有のAPI、設定、Data変化、実行結果、診断、設計境界を測り、汎用的な値Copyや文字列一致を製品Artifact件数へ数えていない
-- [ ] Code／設定の形を問う問題では、正解実装を本文へ先に表示せず、Option自体のAPI、引数、Field、構造、呼出順、演算子が異なる実在可能な近接候補を比較させている
+- [ ] 60%へ算入する全問で全Optionが同じArtifact種別・粒度の実在可能な候補を持ち、API、引数、Field、構造、呼出順、演算子、Identity境界、出力の差が要求Contractに結び付いている。似た見た目だけ、識別子／Comment／表示値だけの差、全候補が同じ結果、正答だけが完成形の問題を算入していない
+- [ ] Code／設定の形を問う問題では、正解実装を本文へ先に表示せず、全Option自体のAPI、引数、Field、構造、呼出順、演算子が異なる実在可能な近接候補を比較させ、検証済み正答集合が正規 `correct` と一致している
 - [ ] 完成Codeとして提示する全OptionをParser、Compiler、Linter、または製品固有の検証Commandで検査し、FragmentならReceiver、代入先、前後の実行Contextを明示している
 - [ ] 完成Configuration／Workflow候補の変数、Task key、Job parameter、依存Edge、出力参照が候補内または明示したContextで閉じ、製品Schema／Dry runが利用できる場合は全候補へ適用している
 - [ ] 実行可能な全Code候補を同じ最小Fixtureで実行し、Keyed candidateだけが要求Contractを満たし、各誤答の観測結果が互いに異なり、その結果と候補別解説が一致している。空DataFrame、欠落key、未定義名、暗黙Global、同じ出力になる別候補をNegative fixtureで拒否している
@@ -235,7 +238,7 @@
 - [ ] 上部Serviceカテゴリの表示位置、Navigation category数、包括的Service curriculum Unit数、Assessment Binding数、生成HTML navigation Gateの結果を報告している
 - [ ] 固有Service-entry数、公式／Assessment Inventory差分、固定Anchor／Landing直接Link数、全11 Dimension合格Entry数、Assessment named-service Binding数を報告している
 - [ ] 正規Service alias数、講義・Stem・Option・解説別の直接Link数、裸／曖昧／誤Link数、Service mention Link Gateと生成HTML Gateの結果を報告している
-- [ ] 公式Sample／Practiceの確認状態とAccess制約、Artifact問題総数と種類別件数を報告している
+- [ ] 公式Sample／Practiceの確認状態とAccess制約、60%へ算入したOption Artifact選択問題総数と種類別件数、Stem-only非算入数、候補検証不合格数を報告している
 - [ ] 変更しなかった保護対象を報告している
 - [ ] 公開URL、ソース、生成元、再検証方法を示している
 - [ ] ソースリポジトリのVisibilityを示している
