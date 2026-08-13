@@ -178,7 +178,7 @@ python scripts/validate_learning_contract.py \
 - 既存問題を変更する前に問題ID、内容Hash、件数を記録し、変更後と比較する。変更・削除した既存IDにはActionと理由を残し、削除にはユーザー承認の参照も残す。品質上の理由がない良問を件数調整だけで削除・置換しない。既存の有効問題が500問または1,000問を超える場合は、明示的な削除依頼なく維持し、超過維持として基準件数、着手前件数、完成件数を記録する。
 - 大幅増量では、先に試験領域、学習目標、難易度、思考タイプ別の目標数を決める。数合わせの言い換え問題を作らない。
 - 新規講座、講義または問題集の大幅更新、全面品質改修では、各問題に正答前提となるLearning unit、Service、Artifact Type、Integration Pattern、関連講義を正規Sourceで保持する。問題IDの全件を学習契約Manifestへ出力し、問題より前のLearner-visible講義へ100%閉じる。60% Artifact問題下限を、講義側でArtifactの読み方を教える割合へ流用しない。
-- 新規制作、大幅増量、または問題集全体の改修では、**選択肢そのものにCode、Command、Configuration、JSON／YAML等のStructured data、入力・期待出力表、Log／Metric、図／UIの候補を提示し、要件を満たす正しいArtifact候補を選ばせる問題**を、通常問題集全体の60%以上にする。500問なら300問以上、1,000問なら600問以上とし、複数Typeを持つ一問も分母に対しては一問と数える。StemだけにArtifactを表示して自然文の説明を選ばせる問題、Artifactを読んで原因名やService名を答える問題、正答実装をStemへ先に表示する問題は学習上有用でも、この60%へ数えない。この60%は教材品質の共通下限であり、現行公式Evidenceと受験後Feedbackから資格・Objective別のType配分と、必要なら60%を超える最低数を決める。限定修正、レビュー、公開だけの依頼へ無断で全面改修を広げない。
+- 新規制作、大幅増量、または問題集全体の改修では、**選択肢そのものにCode、Command、Configuration、JSON／YAML等のStructured data、入力・期待出力表、Log／Metric、図／UIの候補を提示し、要件を満たす正しいArtifact候補を選ばせる問題**を、通常問題集、Practice Exam A、Practice Exam B、各Mockなど、学習者が独立して受けるAssessment surfaceごとに60%以上にする。全Surfaceを合算して下限を満たす迂回を許可せず、65問のExam formなら各Formで39問以上とする。複数Typeを持つ一問も分母に対しては一問と数える。StemだけにArtifactを表示して自然文の説明を選ばせる問題、Artifactを読んで原因名やService名を答える問題、正答実装をStemへ先に表示する問題は学習上有用でも、この60%へ数えない。この60%は教材品質の共通下限であり、現行公式Evidenceと受験後Feedbackから資格・Objective・Surface別のType配分と、必要なら60%を超える最低数を決める。限定修正、レビュー、公開だけの依頼へ無断で全面改修を広げない。
 - Code問題では構文の一語だけでなく、入力、期待結果、Schema／行数／値の変化、中間結果、適用条件を追わせる。Troubleshooting問題ではError直後の修正暗記ではなく、観測、原因切り分け、修正、再検証の順を扱う。
 - 公式ガイドにSingle Choice、Multiple Response、Ordering、Matchingなどの形式がある場合、形式、正答集合・順序・対応関係、形式別件数を生成元へ保持し、許可形式と分布を検査する。
 - 暗記だけでなく、比較、適用、原因診断、ログ読解、構成選択、コスト・性能・セキュリティの設計判断を混ぜる。
@@ -201,11 +201,15 @@ python scripts/validate_learning_contract.py \
 
 60%へ数えるOption Artifact問題は、全候補に同じArtifact種別と粒度の実物を提示し、API名、引数、Field、構造、呼出順、演算子、Identity境界、または実行結果の差から正答を決めさせる。各宣言Typeについて全 `option:<key>` のExact sliceと候補固有の `decision_binding` を `artifact_evidence` に保持し、Stem locationは件数Evidenceとして拒否する。さらに `artifact_selection.task: select_correct_artifact`、要件、全候補を覆う実物中の `decision_axes`、共通Fixture／Schema／Dry run／導出検査のReference、候補別結果、検証済み正答集合を保持する。Code候補は正答・誤答を同じ実行可能またはStub化したFixtureで検証し、手作業の意味Reviewだけを実行証拠にしない。
 
+算入するArtifactは、製品が実際に受理・生成する形式、実在する言語、または判断対象そのものの出力でなければならない。自然文Optionを架空の `apiVersion: course.*`、`*Candidate`、`services`／`operations`／`controls`／`flow` 等へ詰め直したYAML／JSON、正答条件をCommentや配列へ格納したCode、製品Artifactへ戻しても新しい読解を要求しない直列化を拒否する。Artifactを平文へ戻して判断が変わらない問は通常のText問題にし、60%を満たすための機械的Artifact化を行わない。
+
 独立レビューでは、Option Artifactを隠す削除テストを行う。Stemの言い換え、Optionのラベル、`expected`／`correct`列、正答だけの詳しさから候補Artifactなしでも正答を特定できる場合、その問を60%へ数えない。全候補に似たCodeを置いただけで、候補別の観測結果が同じ、差が識別子・Comment・表示値だけ、要求Contractと差分が結び付かない、または検証済み正答集合が正規 `correct` と一致しない問題も数えない。`format: code`、Filename、Family名、Generator内のLabel、Stem中の「Codeを確認した」というProse、`artifact_types` の自己申告、Code fenceの存在を証拠にしない。Metadataと構文検査の合格だけを意味上の正答性の証拠にしない。
 
 実行可能なCode候補は全Optionを同一Fixtureで動かし、要求を満たす候補が一意で、各誤答の実行結果と解説が一致することを確認する。同一Objectiveの大量Variantは、識別子やLiteralを正規化したAST、Control flow、Dataflow、Predicate、Call sequenceでも比較し、見た目だけを変えたReskinを別問題として数えない。値域、Region、Endpoint、Client、権限など製品挙動の前提と、要求するReturn型・Field集合を問題文と候補へ明示的にBindingする。詳細は [references/exam-question-fidelity.md](references/exam-question-fidelity.md) に従う。
 
-構造化データまたは生成問題は、プロジェクト形式から共通JSONLへ書き出し、同梱の `scripts/validate_question_bank.py` で全問を検査する。通常問題集の最終検査では `--require-course-count-policy` と `--require-artifact-policy` を使い、Level、Count Mode、目標数、実数、公式Evidence、全問のOption Artifact分類、全Optionを覆うExact `artifact_evidence`、`artifact_selection` と候補検証、Option Artifact選択問題が全体の60%以上であること、種類別最低数の一致を必須にする。Artifact件数は全候補のEvidenceと選択契約の検証に合格したTypeだけから数え、Stem-only、Labelだけ、候補不足、同一候補、結果差なしは0件として失敗させる。`artifact_policy.minimum_questions_with_artifacts` 自体も `ceil(total × 0.60)` 未満なら失敗させ、低い目標値でGateを迂回させない。生成後は全Option Evidenceの `content` がLearner-visible Markdown／HTMLにも残り、候補検証ReferenceがCIで実行されることを照合する。プロジェクト固有の検査で代用する場合も、60%下限、Option-only、全候補Coverage、Exact learner-visible slice、実質差、共通検証、宣言との一致、生成後照合を同じFailure policyで実装した対応表を残す。
+Option Artifactは横スクロールを前提にせず、Field、引数、処理、Log event、表の列、図のEdgeなど意味の切れ目でSourceを複数行化する。共通GateではArtifact Sourceの一行を100文字以下にし、狭い画面向けCSSは `pre`／`code` の折返しを安全網として用いる。図候補は実際のService／ResourceとFlowを描き、Metadata文字列を箱へ入れた `S → O → C → F` 型を拒否する。Mermaidは `mermaid` Fenceから描画し、通常のCode blockへRaw記法を表示しない。生成HTMLとJavaScript実行後DOMで、各図がSVG等へ描画され、390px相当のOption containerで横Overflowがないことを検査する。
+
+構造化データまたは生成問題は、プロジェクト形式から共通JSONLへ書き出し、同梱の `scripts/validate_question_bank.py` で全問を検査する。各問へ `assessment_surface`、Targetsの `artifact_policy.assessment_surfaces` へ全独立Surfaceの総数、60%以上の最低数、必要なら種類別最低数を保持する。最終検査では通常問題と全Practice／Mock formへ `--require-course-count-policy` と `--require-artifact-policy` を適用し、Level、Count Mode、目標数、実数、公式Evidence、全問のOption Artifact分類、全Optionを覆うExact `artifact_evidence`、`artifact_selection` と候補検証、Surfaceごとの60%と種類別最低数の一致を必須にする。Artifact件数は全候補のEvidenceと選択契約の検証に合格したTypeだけから数え、Stem-only、Labelだけ、候補不足、同一候補、結果差なし、架空Wrapper、100文字超の行、Raw Mermaidは0件として失敗させる。全体または各Surfaceの最低値を `ceil(total × 0.60)` 未満にしてGateを迂回させない。生成後は全Option Evidenceの `content` がLearner-visible Markdown／HTMLにも残り、候補検証ReferenceがCIで実行されることを照合する。プロジェクト固有の検査で代用する場合も、Surface別60%下限、Artifact-native、Option-only、全候補Coverage、Exact learner-visible slice、実質差、共通検証、可読性、Mermaid描画、生成後照合を同じFailure policyで実装した対応表を残す。
 
 レビュー前に「高品質」「完成」と宣言しない。BlockerとMajorは0件にし、Minorは修正するか、残す理由と学習者への影響を最終報告へ記録する。
 
@@ -215,14 +219,14 @@ python scripts/validate_learning_contract.py \
 
 - ホームから「専門用語の前に読むページ → 用語集 → 学習ガイド → 講義」へ迷わず移動できる導線を作る。
 - 各講座の上部カテゴリに確定した教材言語のServiceカテゴリを第一級項目として表示し、Serviceカテゴリから包括的Service講義へ、包括的講義から適用先のDomain／Task講義へ移動できるようにする。ServiceカテゴリはDomain／Task、通常問題、模擬問題より前へ置く。
-- PCとスマートフォンで、本文、表、コード、数式、図、折りたたみ解答が読めるようにする。実画面を確認できない場合、レスポンシブCSSとHTML構造の静的検査は行うが、見た目とタップ操作を合格扱いにしない。
+- PCとスマートフォンで、本文、表、コード、数式、図、折りたたみ解答が読めるようにする。Option Artifactは意味のあるSource改行を優先し、390px相当のViewportでArtifact containerの `scrollWidth <= clientWidth` を実DOMで確認する。Mermaid候補はRaw Sourceではなく描画済みSVG等を表示する。実画面を確認できない場合、レスポンシブCSSとHTML構造の静的検査は行うが、横Overflow、図の実描画、見た目、タップ操作を合格扱いにしない。
 - 検索、目次、前後移動、用語アンカー、講義間リンクを機能させる。
 - 全講義・問題のService表記Linkを生成HTMLで検査し、各 `href` が宣言EntryのPageと固定Anchorへ解決すること、Link先Anchorが一意に存在すること、裸alias・Landing止まり・誤Entry・外部DocumentationだけへのLinkが0件であることを確認する。
 - 長いページを増やすだけでなく、前提単位と試験目標単位で分割し、学習順を示す。
 - ソース非公開、検索抑制、認証付き非公開を混同しない。`noindex`や`robots.txt`はアクセス制御ではないと説明する。
 - 公開サイトとソースリポジトリのVisibilityを分けて扱う。サイトを一般公開する依頼は、ソースリポジトリをPublicにする許可ではない。
 - 複数講座サイトのCIでは、全講座の生成元、講義、問題、レビュー台帳、静的HTML検査を明示的に列挙する。一つの講座だけの成功をサイト全体の成功として扱わない。
-- 新しいValidatorを追加したり警告を致命化したりした場合、ローカルの必須検査集合と公開CIの検査集合を比較し、同じFailure policyで実行する。公開Workflowに旧Commandが残り、候補Artifact、Variant実質差、警告失敗などの新しいGateを迂回できる状態を許可しない。Linux CIへWindows用Orchestratorをそのまま渡せない場合は、同等の個別Stepを明示して可搬性を検証する。
+- 新しいValidatorを追加したり警告を致命化したりした場合、ローカルの必須検査集合と公開CIの検査集合を比較し、同じFailure policyで実行する。公開Workflowに旧Commandが残り、Surface別Artifact比率、Artifact-native判定、候補Artifact、Variant実質差、可読性、Mermaid描画、警告失敗などの新しいGateを迂回できる状態を許可しない。Linux CIへWindows用Orchestratorをそのまま渡せない場合は、同等の個別Stepを明示して可搬性を検証する。
 
 ## 9. 外部サービスと公開を扱う
 
@@ -259,7 +263,7 @@ python scripts/validate_learning_contract.py \
 - 同じ範囲では、各Service Entryの正式名称を含む `aliases` を正規Inventoryと完全一致させ、全正規講義と全learner-visible Assessment PageのProseに現れる各aliasが正しいEntry pathと固定Anchorへ直接Linkされることを `--require-service-mention-links` で100%照合する。長いaliasを優先し、同一aliasの複数Entry割当、裸文字、StemだけのLink、Option／解説の未Link、Code／URLの誤検出を失敗させる。
 - 厳格Build後の全生成HTMLで、上部Header、Tab、または同等のCourse navigationにServiceカテゴリが表示され、正しいLanding pageへ移動できることを検査する。Source Manifestだけの自己申告を公開表示の証拠にしない。
 - 学習契約Gateには、Service説明不足、固有Service Entry欠落、名前一覧だけ、一文用語定義だけ、Family Evidence流用、Service名差し替えTemplate、Anchor／Landing Link欠落、Assessment候補Service未Binding、alias欠落・衝突、講義／Stem／Option／解説の裸alias、誤Entry／Landing／外部DocumentationへのLink、最長一致違反、Code／URLの誤Link、Artifact読解不足、Integration flow不足、Learner-visible evidence欠落、問題ID欠落、未承認の下位資格仮定を拒否するNegative fixtureを含める。機械Gate合格後も、Requirement列挙の完全性と説明の技術的妥当性を意味Reviewする。
-- 問題を新規作成、大幅拡張、または全面改修した場合、全Option Evidenceと `artifact_selection` の検証に合格した一意なOption Artifact選択問題数と種類別件数を数え、通常問題集全体の60%以上かつ公式Evidenceから定めた種類別最低数を満たすことを確認する。Stem-only、`format`、Family、Filename、説明文、`artifact_types` の宣言数、似た候補の見た目を実測数として報告しない。
+- 問題を新規作成、大幅拡張、または全面改修した場合、全Option Evidenceと `artifact_selection` の検証に合格したArtifact-nativeなOption Artifact選択問題数と種類別件数をAssessment surfaceごとに数え、各Surfaceで60%以上かつ公式Evidenceから定めた種類別最低数を満たすことを確認する。Stem-only、`format`、Family、Filename、説明文、`artifact_types` の宣言数、架空Wrapper、似た候補の見た目を実測数として報告しない。
 - 大規模変更では、依頼範囲に含まれ、プロジェクト構造に適合する場合、プロジェクト固有の検証スクリプトを追加または更新する。保護対象を変える必要がある場合は追加せず、既存検査と一時的な読み取り検査で代替する。
 - Review用Content manifestは、そのReviewerが実際に確認した固定Surfaceだけで構成する。問題ReviewならCanonical問題、Learner-visible生成問題、対応Objective表などに限定し、無関係な講義、Lab、Validator、Dependency、ADR、Review台帳を含めない。Review外の変更を含むRelease manifestは別に保持し、Review対象自体が同一なのにStampがStale化しないことを、対象内／対象外の変更Fixtureで確認する。
 - 生成物がある場合、生成前後の対象ファイル集合と正規化本文を比較し、再生成で差分が出ないことを確認する。同梱の `scripts/check_generated_reproducibility.py` または同等検査を使い、UTF-8 BOMとCRLF／LFは同値として正規化し、Locale依存Sortを排除してWindowsとLinuxで同一結果にする。
@@ -281,14 +285,14 @@ Skill更新が適用範囲の拡大、既存方針との衝突、外部サービ
 - 何をどの範囲まで変更したか
 - 公式試験範囲の確認日または対象バージョン
 - 講義、用語、問題、演習の件数と主な改善
-- 公式Sample／Practiceの確認状態、Access制約、60%へ算入したOption Artifact選択問題総数と種類別件数、Stem-only非算入数
+- 公式Sample／Practiceの確認状態、Access制約、各Assessment surfaceの総数・60%最低数・算入したArtifact-native Option Artifact問題数と種類別件数、Stem-only／架空Wrapper非算入数
 - Entry contract、問題前提閉包のAssessment総数、未対応Service／Artifact／Integration件数、学習契約Gateの結果
 - 正規Lecture総数、末尾の重複Service一覧を削除したページ数、Scenario本文でService説明が不足するページ数
 - 上部Serviceカテゴリの表示位置、正規Navigation category数、包括的Service curriculum Unit数、未対応Assessment数、`--require-service-curriculum` Gateと生成HTML navigation Gateの結果
 - 正規Service-entry数、公式／Assessment由来のInventory差分、固定Anchor／Landing直接Link数、全11 Dimension合格Entry数、未講義または未Bindingの固有Service数、`--require-named-service-entries` Gateの結果
 - 正規Service alias数、講義・Stem・Option・解説別のService表記Link数、裸／曖昧／誤Link数、`--require-service-mention-links` Gateと生成HTML Link Gateの結果
 - 全Assessmentの `service_curriculum_links` Binding数、未Binding数、および上部Service curriculum Gateを実行した完全なCommand
-- 60%へ算入したOption Artifact選択問題数、Stem-onlyで非算入の問題数、全候補Coverage／決定差分／候補検証の不合格数、実行した候補検証Reference
+- Surface別に60%へ算入したOption Artifact選択問題数、Stem-only／架空Wrapperで非算入の問題数、全候補Coverage／決定差分／候補検証／100文字行長／Mermaid描画／390px Overflowの不合格数、実行した候補検証Reference
 - 自動検査、意味レビュー、独立レビュー、ビルド、公開確認の結果
 - 変更していない保護対象
 - 公開URL、ソース、生成元、再検証コマンド

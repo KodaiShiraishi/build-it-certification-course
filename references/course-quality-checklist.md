@@ -131,12 +131,14 @@
 - [ ] `--require-course-count-policy` でQuestion Set、Levelと根拠、Count Mode、標準件数またはユーザー指定と実数の一致を検査している
 - [ ] 公式ガイドの問題形式と、Single Choice／Multiple Response／Ordering／Matchingなどの形式別件数・Response表現が一致している
 - [ ] 試験領域、難易度、思考タイプの分布を設計している
-- [ ] 全OptionにArtifact候補があり、要件を満たす正しい候補を選ばせる検証済み問題を通常問題集全体の60%以上にし、現行公式Evidenceから種類別最低数を設計している。Stem-only Artifact問題を60%へ数えていない
+- [ ] 全問に `assessment_surface` があり、通常問題集、Practice Exam A／B、各Mockなど学習者が独立して受ける全SurfaceをTargetsへ列挙している
+- [ ] 全OptionにArtifact候補があり、要件を満たす正しい候補を選ばせる検証済み問題を各Assessment surfaceの60%以上にし、現行公式EvidenceからSurface／種類別最低数を設計している。全Surface合算やStem-only Artifact問題を60%へ数えていない
 - [ ] 算入問題の全宣言Typeについて全 `option:<key>` のExact `artifact_evidence`、候補固有Binding、有効な `artifact_selection`、共通Fixture／Schema／Dry run／導出検査の候補別結果と検証済み正答集合を `--require-artifact-policy` で検査している
 - [ ] Artifact件数を `format`、Family、Filename、説明文、自己申告Label、Stem Artifact、Code fenceの見た目から数えず、全候補Coverageと選択契約に合格したEvidenceだけを集計し、生成Markdown／HTMLにも全OptionのExact Evidenceが残ることを照合している
 - [ ] 構築、開発、Data変換、診断、運用を測る資格では、Code、Command、Configuration、Structured data、入力・出力表、Log／Metric等が正答判断に必要な問題を十分に含めている
 - [ ] 全ObjectiveとGenerator familyを横断してOption Artifact削除テストを行い、候補Artifactを隠してもStem、Option label、周辺Proseの手掛かりだけで解ける問をArtifact件数から除外または修正している
 - [ ] 削除テスト合格だけで完了せず、ArtifactとOptionが公式Objectiveに対応する製品固有のAPI、設定、Data変化、実行結果、診断、設計境界を測り、汎用的な値Copyや文字列一致を製品Artifact件数へ数えていない
+- [ ] Artifactを平文へ戻しても判断が変わらない問をText問題へ戻し、架空の `apiVersion: course.*`、`*Candidate`、`services`／`operations`／`controls`／`flow` Wrapper、正答条件をComment／String Listへ直列化したCode／YAML／JSONを算入していない
 - [ ] 60%へ算入する全問で全Optionが同じArtifact種別・粒度の実在可能な候補を持ち、API、引数、Field、構造、呼出順、演算子、Identity境界、出力の差が要求Contractに結び付いている。似た見た目だけ、識別子／Comment／表示値だけの差、全候補が同じ結果、正答だけが完成形の問題を算入していない
 - [ ] Code／設定の形を問う問題では、正解実装を本文へ先に表示せず、全Option自体のAPI、引数、Field、構造、呼出順、演算子が異なる実在可能な近接候補を比較させ、検証済み正答集合が正規 `correct` と一致している
 - [ ] 完成Codeとして提示する全OptionをParser、Compiler、Linter、または製品固有の検証Commandで検査し、FragmentならReceiver、代入先、前後の実行Contextを明示している
@@ -146,6 +148,8 @@
 - [ ] Rate、Cost、Latency、Count、Probabilityの型・単位・値域が現実的で、負の料金や範囲外の率を目印にしておらず、境界値では丸めと包含関係がStem、実装、解説で一致している
 - [ ] 製品API、Model、Endpoint、Region、Deployment mode、Client、権限の前提をStemとSource claimへ明示し、Course独自Schema／Adapterを製品APIと区別している。要求出力が複数Fieldなら全候補のReturn型とField集合を厳密にBindingしている
 - [ ] Command列がfail-fastを要件にする場合、native commandの非0終了が後続処理を確実に停止し、PowerShell等で終了Codeを無視してDeployへ進む形になっていない
+- [ ] JSON／YAMLはField、Commandは引数、Codeは処理、LogはEvent／Attribute、表は判断列で意味的に改行し、算入ArtifactのSource行が100文字以下である。CSSの強制折返しだけで長い一行を隠していない
+- [ ] Mermaid候補を `mermaid` Fenceで生成し、実Service／ResourceとEvent／Request／Data／Failure edgeを描いている。Raw MermaidのCode表示やMetadata box列をDiagram問題として算入していない
 - [ ] Code問題で入力から中間結果・期待出力を追え、診断問題で観測から原因・修正・再検証の順を追える
 - [ ] 暗記、比較、適用、診断、ログ読解、設計判断を組み合わせている
 - [ ] 正答が一意で、問題文に判断条件が足りている
@@ -208,6 +212,8 @@
 - [ ] Service landingの全正式名称Linkが生成HTMLの宣言Pageと固定Anchorへ解決し、個別見出しと用語集より厚い本文を表示する
 - [ ] 全講義・問題HTMLのlearner-visible Service aliasが一つの`a`要素内にあり、`href`が宣言Entry Pageと固定Anchorへ解決する。Code、URL、HTML属性を対象外にし、Landing止まり、外部Documentation、別Entry、裸aliasが0件である
 - [ ] 内部リンク、用語アンカー、画像、図、コード、数式、折りたたみが機能する
+- [ ] 生成HTMLでMermaid Sourceが通常の `pre > code` として露出せず、Mermaid containerへ入り、JavaScript実行後DOMで各候補がSVG等へ描画されている
+- [ ] 390px相当とPC幅の実DOMで、各Option Artifact containerの `scrollWidth <= clientWidth` を確認し、横スクロールなしで判断に必要な全内容を読める
 - [ ] 複数講座サイトでは、講座切替、講座内カテゴリ、現在カテゴリ内のページ一覧を別の階層として表示している
 - [ ] 複数講座サイトのCIが、全講座の生成元、講義、問題、Review台帳、静的HTML検査を対象にしている
 - [ ] ローカルで必須のValidator、警告失敗Option、候補Artifact検査、Variant実質差検査を公開CIでも同じFailure policyで実行し、新規Gate追加後にCIとの集合差が残っていない
@@ -238,7 +244,7 @@
 - [ ] 上部Serviceカテゴリの表示位置、Navigation category数、包括的Service curriculum Unit数、Assessment Binding数、生成HTML navigation Gateの結果を報告している
 - [ ] 固有Service-entry数、公式／Assessment Inventory差分、固定Anchor／Landing直接Link数、全11 Dimension合格Entry数、Assessment named-service Binding数を報告している
 - [ ] 正規Service alias数、講義・Stem・Option・解説別の直接Link数、裸／曖昧／誤Link数、Service mention Link Gateと生成HTML Gateの結果を報告している
-- [ ] 公式Sample／Practiceの確認状態とAccess制約、60%へ算入したOption Artifact選択問題総数と種類別件数、Stem-only非算入数、候補検証不合格数を報告している
+- [ ] 公式Sample／Practiceの確認状態とAccess制約、各Assessment surfaceの総数・最低数・60%へ算入したArtifact-native Option Artifact問題数と種類別件数、Stem-only／架空Wrapper非算入数、候補検証・行長・Mermaid描画・横Overflow不合格数を報告している
 - [ ] 変更しなかった保護対象を報告している
 - [ ] 公開URL、ソース、生成元、再検証方法を示している
 - [ ] ソースリポジトリのVisibilityを示している

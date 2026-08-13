@@ -18,7 +18,7 @@
 
 ## 2. 実務Artifactの分類
 
-60%ポリシーへ算入する問題は、選択肢そのものに提示して正しい実装・設定・出力等を選ばせる候補を `artifact_types` で分類する。一問が複数へ該当してよい。各宣言Typeについて全 `option:<key>` に一件ずつ `artifact_evidence` を持ち、候補内に実在する文字列をExact sliceとして保持する。StemだけのArtifactは補助Scenarioとして使用できるが、60%の件数Evidenceにはしない。
+60%ポリシーへ算入する問題は、選択肢そのものに提示して正しい実装・設定・出力等を選ばせる候補を `artifact_types` で分類し、学習者が独立して受ける問題面を `assessment_surface` で識別する。一問が複数Typeへ該当してよい。各宣言Typeについて全 `option:<key>` に一件ずつ `artifact_evidence` を持ち、候補内に実在する文字列をExact sliceとして保持する。StemだけのArtifactは補助Scenarioとして使用できるが、60%の件数Evidenceにはしない。
 
 | 値 | 対象 |
 |---|---|
@@ -43,7 +43,7 @@
 | Objective | 公式Evidence | 問われる判断 | Artifact type | 最低問数 | 根拠 |
 |---|---|---|---|---:|---|
 
-通常問題集のArtifact問題総数は、全Optionの検証済み `artifact_evidence` と有効な `artifact_selection` を持つ一意な正しいArtifact候補選択問題で、全体の60%以上を共通下限とする。500問なら300問以上、1,000問なら600問以上であり、`ceil(total × 0.60)` で端数を切り上げる。Stem-only Artifact問題は分子へ入れない。複数Typeを持つ一問は種類別集計では各Typeへ一回ずつ数えるが、60%の分子では一問と数える。公式Sampleで実際に素材が提示される頻度、試験ガイドの動詞、想定実務経験、ユーザーの受験後Feedbackを根拠に、資格・Objective別のType配分と60%を超える最低数を設計する。
+通常問題集、Practice Exam A、Practice Exam B、各Mockなど、学習者が別々に開始・採点できる単位を独立したAssessment surfaceとする。各SurfaceのArtifact問題総数は、全Optionの検証済み `artifact_evidence` と有効な `artifact_selection` を持つ一意な正しいArtifact候補選択問題で、そのSurface全体の60%以上を共通下限とする。500問なら300問以上、1,000問なら600問以上、65問のExam formなら39問以上であり、`ceil(surface total × 0.60)` で端数を切り上げる。全Surface合算で60%を満たしても一つでも下限未満なら失敗とする。Stem-only Artifact問題は分子へ入れない。複数Typeを持つ一問は種類別集計では各Typeへ一回ずつ数えるが、60%の分子では一問と数える。公式Sampleで実際に素材が提示される頻度、試験ガイドの動詞、想定実務経験、ユーザーの受験後Feedbackを根拠に、資格・Objective・Surface別のType配分と60%を超える最低数を設計する。
 
 公式Sampleの母数が少ない場合は、見かけの割合をそのまま全問題へ外挿しない。60%は公式出題率の推定ではなく、実務読解を十分に練習する教材品質の下限として扱い、その区別とEvidenceの不確実性を `calibration_note` に書く。ユーザーの領域別Scoreと教材習得状況が得られたら、単なる苦手分野ではなく、Coverage、Artifact密度、問題形式、受験言語の差を分けて再評価する。
 
@@ -56,7 +56,13 @@
 - **Command／operation**: 全OptionへCommand列を置き、実行場所、Credential、Context、Option、副作用、Rollback、fail-fastの差から正しい列を選ばせる。
 - **Architecture／access boundary**: 全OptionへDiagram／Policy／構成候補を置き、利用主体、Account有無、Read／Write、Cloud／Region、Protocol、管理責任の差から正しい候補を選ばせる。
 
+Artifactは、その製品が実際に受理または生成するSchema、実在する言語、実行可能なCommand、実際のLog／Metric、入力・出力、またはArchitectureそのものを使う。自然文Optionを架空の `apiVersion: course.*`、`ArchitectureCandidate`、`services`／`operations`／`controls`／`flow`へ詰めただけのYAML／JSON、正答条件をCommentやString Listへ直列化したCodeを禁止する。Artifactを通常文へ戻しても同じ語句だけで解け、構文、Field、Operator、Control flow、Dataflow、Identity、実行結果を読む必要がない問はText問題へ戻し、Artifact件数へ算入しない。
+
 Code候補を完成した実装として提示する場合は、正解だけでなく全候補を対象言語のParser、Compiler、Linter、または製品固有の検証Commandへ通し、少なくとも構文として完全であることを確認する。先頭がMethod chainだけのFragment、Receiverや必須引数が省略された式、URLだけの文字列などを使う場合は、FragmentであることとReceiver、代入先、前後の実行Contextを問題内に明示する。誤答は偶発的な構文欠落ではなく、実在可能なAPI、引数、Field、Operator、型、実行Semanticsの差で作る。
+
+全候補を読みやすいSourceとして整形する。JSON／YAMLはField単位、Commandは引数単位、Codeは処理単位、LogはEvent／Attribute単位、表は判断に必要な列単位で改行し、一行100文字を共通上限とする。長いARN、URL、Token、Payloadは要件を失わないNamed placeholderや前提変数へ分ける。CSSの強制折返しだけをSource整形の代わりにせず、狭い画面では安全網として併用し、390px相当の実DOMで各Option Artifactの横Overflowが0であることを確認する。
+
+Mermaid候補は `mermaid` Fenceで記述し、生成HTMLではMermaid container、JavaScript実行後DOMではSVG等へ変換されることを確認する。`flowchart LR`等を通常のCode blockへ表示しない。図はAmazon S3、Amazon EventBridge、Queue、Workflow等の実ResourceをNodeに、Event、Request、Data、Failure pathをEdgeにし、`services → operations → controls → flow`のようなMetadata box列をArchitecture図として数えない。Mermaid Source自体の正誤を問うと明示した問題だけRaw Source表示を許可し、その場合は `diagram_ui` ではなくCode問題として分類する。
 
 Parser合格だけを完成Artifactの証拠にしない。設定やWorkflowは、参照する変数、Task key、Job parameter、依存Edge、出力が同じ候補内または明示した前提Contextで解決するかをReference closure検査する。Command列は、前段の失敗が後段を停止する契約まで確認する。たとえばPowerShellでnative commandの非0終了を前提にするなら、`$LASTEXITCODE`、`$?`、または明示的な例外化がなく次のDeployへ進む候補をfail-fast実装として扱わない。製品CLIのSchema検証やDry runが利用できる場合は、構文Parserだけでなく全完成候補へ適用する。
 
@@ -113,9 +119,10 @@ Open responseの必須EvidenceとRubricは、`Yes`／`No`、`Not always`、正�
 
 各問に次を追加する。
 
-```json
+````json
 {
   "id": "Q-001",
+  "assessment_surface": "practice-bank",
   "artifact_types": ["code"],
   "stem": "Which implementation starts the named AWS Glue job and returns the new run ID?",
   "options": {
@@ -157,7 +164,7 @@ Open responseの必須EvidenceとRubricは、`Yes`／`No`、`Not always`、正�
     }
   }
 }
-```
+````
 
 Targetsには、Evidenceと最低数を保持する。`calibration_evidence` には `exam_guide` と、`official_sample` または `official_practice` の調査結果を必ず含める。公開されていなくても `login_required`、`not_found`、旧版なら `outdated` と記録する。ユーザーの抽象化された受験観察は `user_observation` とADR等のReferenceで追加できる。
 
@@ -185,6 +192,16 @@ Targetsには、Evidenceと最低数を保持する。`calibration_evidence` に
     ],
     "calibration_note": "Official guide and abstract user observations indicate frequent code and input-output reasoning.",
     "minimum_questions_with_artifacts": 600,
+    "assessment_surfaces": {
+      "practice-bank": {
+        "total": 1000,
+        "minimum_questions_with_artifacts": 600,
+        "minimum_by_type": {
+          "code": 180,
+          "configuration": 40
+        }
+      }
+    },
     "minimum_by_type": {
       "code": 180,
       "table_io": 80,
@@ -204,7 +221,7 @@ python scripts/validate_question_bank.py questions.jsonl `
   --official-source-host vendor.example
 ```
 
-この検査は、公式Calibration Evidenceの記録、全問の明示的な `artifact_types` と `artifact_evidence`、各宣言TypeのEvidenceが全Optionを覆いExact substringとして存在すること、Typeごとの最低限の構造、`artifact_selection` の要件・決定軸・候補検証・正答集合、Option Artifact選択問題総数が `ceil(total × 0.60)` 以上であること、種類別最低数を検証する。Stem location、候補不足、同一候補、候補結果差なし、検証済み正答と `correct` の不一致は0件扱いにする。複数Typeの一問は各Typeへ一回ずつ数えるため種類別合計は総問題数を超えてよいが、60%の分子では一問である。
+この検査は、公式Calibration Evidenceの記録、全問の `assessment_surface`、全独立Surfaceの宣言総数と最低数、明示的な `artifact_types` と `artifact_evidence`、各宣言TypeのEvidenceが全Optionを覆いExact substringとして存在すること、Typeごとの最低限の構造、`artifact_selection` の要件・決定軸・候補検証・正答集合、各SurfaceのOption Artifact選択問題総数が `ceil(surface total × 0.60)` 以上であること、種類別最低数を検証する。Stem location、候補不足、同一候補、候補結果差なし、架空Wrapper、100文字超のSource行、Raw Mermaid、検証済み正答と `correct` の不一致は0件扱いにする。複数Typeの一問は各Typeへ一回ずつ数えるため種類別合計は総問題数を超えてよいが、60%の分子では一問である。
 
 機械検査は全Option Artifactの表示上の存在、構造、決定差分、候補検証記録を確認するGateであり、Reference先が実行された事実やObjective fidelityをMetadataだけで証明しない。生成後は各 `artifact_evidence.content` がLearner-visible Markdown／HTMLに残り、`artifact_selection.validation.reference` がローカル必須検査とCIで実行されることも照合する。Canonical JSONLだけが持つ非表示Metadataを表示Artifactや実行証拠と誤認しない。最終レビューでは全Objectiveを横断して削除テストを行い、さらにArtifact候補が公式Objectiveに対応する製品固有のAPI、設定、Data変化、実行結果、障害診断、または設計境界を実際に判断させるか確認する。汎用辞書の値Copy、YAML Slotの一対一転記、Trace文字列の完全一致だけで解ける問は、Artifactを消すと解けなくても製品Artifact件数へ数えない。正答条件を自然文で書いたCommentやCourse独自のAcceptance recordをCode、SQL、YAML、JSON Fenceへ包んだだけのものも、実装Artifactや実行結果として数えない。同じLog、Metric、Config、Codeの雛形をField名やAction文字列だけ変えて無関係なObjectiveへ回転させることも禁止する。ObjectiveとArtifact familyの組み合わせごとに、そのArtifactから導く判断がObjectiveの動詞と対象へ直接対応する根拠をReview台帳へ残す。確認した問題ID、Objective、判定、修正内容をReview台帳またはADRへ残す。テンプレート生成では、一つの失敗が大量複製されるため、Generatorの各問題Familyを少なくとも一度は確認する。
 
@@ -213,16 +230,19 @@ python scripts/validate_question_bank.py questions.jsonl `
 - 現行公式ガイドと公式Sample／Practiceの調査状態、確認日、Access制約が残っている。
 - Loginが必要な公式問題をCodexが確認できない場合、ユーザーへ明示した記録がある。
 - Objective別にArtifact typeと最低数の根拠がある。
-- 全Option Evidenceと `artifact_selection` の検証に合格した正しいArtifact候補選択問題の一意な件数が、通常問題集全体の60%以上である。
+- 全Option Evidenceと `artifact_selection` の検証に合格したArtifact-nativeな正しい候補選択問題の一意な件数が、通常問題集と各Practice／Mock formのそれぞれで60%以上である。
 - 算入問題は各宣言Typeについて全Optionの `artifact_evidence` を持ち、Evidence内容が解答前に見えるOptionと生成Markdown／HTMLの両方に存在する。Stem-only Artifactは算入していない。
 - 全候補のCode、Configuration、Data、Log等が同じ種別・粒度の実在可能な候補であり、要件を満たす正答を行・Field・Operator・値・関係・実行結果の差から選ばせる。
 - Option Artifactを隠す削除テストで、Stemと周辺Proseだけから正答を特定できない。
 - `artifact_selection` のDecision axisが候補内Exact sliceへ結び付き、共通Fixture／Schema／Dry run／導出検査の候補別結果と検証済み正答集合がある。Code候補は同じFixtureで実行されている。
 - ArtifactとOptionが公式Objectiveに対応する製品判断を測り、汎用的な値Copyや文字列一致だけの問題を製品Artifact件数へ数えていない。
+- 架空のCourse Schema、Candidate Wrapper、自然文の直列化をArtifact件数へ数えていない。
 - 正答条件を述べるCourse独自CommentやAcceptance proseをFenceへ包み、Codeや設定の件数へ算入していない。
 - 一つの汎用Artifact familyを無関係なObjectiveへ回転させず、ObjectiveとFamilyの各組み合わせを意味レビューしている。
 - Code／設定の形を問う問題では、正解を本文へ先に表示せず、実在可能な近接候補のAPI、引数、Field、構造、呼出順、演算子を比較している。
 - 入力から出力、中間結果、Errorから診断順を追う問題が含まれる。
 - Stem-only、Label-only、Option候補不足、同一候補、結果差なし、非表示Evidence、構造のないProseを拒否するNegative fixtureが成功する。
+- Aggregateは60%以上でも一つのPractice／Mock surfaceが未達、100文字超の単一行、Raw Mermaid、Metadata boxだけの図を拒否するNegative fixtureが成功する。
+- 生成HTMLと実DOMでMermaidが図へ描画され、390px相当のOption Artifactに横Overflowがない。
 - `--require-artifact-policy` が成功し、検証済みEvidenceから数えた実測数が最低数を満たす。
 - 公式問題と同一・再現と主張せず、一次資料から独自Scenarioを作っている。

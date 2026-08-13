@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import csv
 import hashlib
 import io
@@ -70,6 +71,7 @@ ARTIFACT_TYPES = {
     "diagram_ui",
 }
 MIN_ARTIFACT_QUESTION_RATIO = 0.60
+MAX_ARTIFACT_SOURCE_LINE_LENGTH = 100
 ARTIFACT_SELECTION_TASK = "select_correct_artifact"
 ARTIFACT_VALIDATION_METHODS = {
     "shared_fixture",
@@ -105,6 +107,17 @@ ARTIFACT_KEY_VALUE_PATTERN = re.compile(
 ARTIFACT_LOG_SIGNAL_PATTERN = re.compile(
     r"(?:\b(?:TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\b|\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}|\b[A-Za-z_][\w.-]*\s*[=:]\s*-?\d+(?:\.\d+)?)",
     re.IGNORECASE,
+)
+MARKDOWN_FENCE_PATTERN = re.compile(
+    r"^\s*```(?P<language>[A-Za-z0-9_+.-]*)\s*\n(?P<body>.*)\n```\s*$",
+    re.DOTALL,
+)
+MERMAID_DECLARATION_PATTERN = re.compile(
+    r"^\s*(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|quadrantChart|xychart-beta)\b",
+    re.IGNORECASE,
+)
+DECORATIVE_WRAPPER_FIELD_PATTERN = re.compile(
+    r"(?im)^\s*(?:[-*]\s*)?[\"']?(services|operations|controls|flow)[\"']?\s*:",
 )
 DEFAULT_CUE_TERMS = (
     "必ず",
@@ -213,7 +226,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--require-artifact-policy",
         action="store_true",
-        help="require official evidence and at least 60% option-artifact selection questions",
+        help="require official evidence and at least 60%% native, readable option-artifact questions on every assessment surface",
     )
     parser.add_argument("--review-ledger", type=Path, help="semantic CSV with id,status,reviewer,notes[,question_hash]")
     parser.add_argument("--independent-review-ledger", type=Path, help="independent review CSV with the same columns")
@@ -1123,6 +1136,72 @@ def _artifact_location_text(question: dict[str, Any], location: str) -> str | No
     return None
 
 
+def _artifact_fence(content: str) -> tuple[str, str]:
+    normalized = content.replace("\r\n", "\n").replace("\r", "\n").strip()
+    match = MARKDOWN_FENCE_PATTERN.fullmatch(normalized)
+    if match is None:
+        return "", normalized
+    return match.group("language").casefold(), match.group("body")
+
+
+def _decorative_artifact_wrapper(content: str) -> str | None:
+    normalized = content.replace("\r\n", "\n").replace("\r", "\n")
+    folded = normalized.casefold()
+    if re.search(r"(?im)^\s*apiVersion\s*:\s*course(?:\.|/)", normalized):
+        return "a course-invented apiVersion is not a vendor or language-native artifact"
+    if re.search(r"(?im)^\s*kind\s*:\s*(?:architecture|implementation|configuration|decision)candidate\b", normalized):
+        return "a generic Candidate kind only serializes the prose answer"
+    wrapper_fields = {match.group(1).casefold() for match in DECORATIVE_WRAPPER_FIELD_PATTERN.finditer(normalized)}
+    mermaid_wrapper_fields = {
+        field
+        for field in ("services", "operations", "controls", "flow")
+        if re.search(rf"(?i)[\"']?{field}\s*:", normalized)
+    }
+    if len(wrapper_fields | mermaid_wrapper_fields) >= 3:
+        return "generic services/operations/controls/flow fields serialize prose instead of testing a native artifact"
+    if "not-specified" in folded and (wrapper_fields or mermaid_wrapper_fields):
+        return "placeholder values do not form an implementation or product artifact"
+    return None
+
+
+def _artifact_candidate_issues(artifact_type: str, content: str) -> list[tuple[str, str]]:
+    language, body = _artifact_fence(content)
+    issues: list[tuple[str, str]] = []
+    for line_number, line in enumerate(body.splitlines(), start=1):
+        visible_length = len(line.expandtabs(4))
+        if visible_length > MAX_ARTIFACT_SOURCE_LINE_LENGTH:
+            issues.append(
+                (
+                    "artifact-line-too-long",
+                    f"line {line_number} has {visible_length} characters; split the artifact semantically at or before {MAX_ARTIFACT_SOURCE_LINE_LENGTH}",
+                )
+            )
+
+    wrapper_reason = _decorative_artifact_wrapper(body)
+    if wrapper_reason is not None:
+        issues.append(("artifact-decorative-wrapper", wrapper_reason))
+
+    mermaid_source = bool(MERMAID_DECLARATION_PATTERN.search(body))
+    if artifact_type == "diagram_ui" and mermaid_source and language != "mermaid":
+        issues.append(
+            (
+                "mermaid-artifact-not-renderable",
+                "Mermaid source must use a mermaid fence and render as a diagram, not appear as a text/code block",
+            )
+        )
+    if language == "mermaid" and not mermaid_source:
+        issues.append(("invalid-mermaid-artifact", "mermaid fence does not start with a supported diagram declaration"))
+
+    try:
+        if language in {"python", "py"}:
+            ast.parse(body)
+        elif language == "json":
+            json.loads(body)
+    except (SyntaxError, json.JSONDecodeError) as error:
+        issues.append(("artifact-native-syntax-invalid", f"{language} candidate does not parse: {error}"))
+    return issues
+
+
 def _has_artifact_structure(artifact_type: str, content: str) -> bool:
     normalized = content.replace("\r\n", "\n").replace("\r", "\n").strip()
     if artifact_type == "code":
@@ -1246,6 +1325,11 @@ def validate_question_artifact_evidence(
                     f"{label}.content does not contain recognizable {artifact_type} structure",
                 )
             )
+            continue
+        candidate_issues = _artifact_candidate_issues(artifact_type, content)
+        if candidate_issues:
+            for code, message in candidate_issues:
+                findings.append(Finding("ERROR", code, f"{label}: {message}"))
             continue
         decision_binding = item.get("decision_binding")
         if not isinstance(decision_binding, str) or not decision_binding.strip():
@@ -1540,6 +1624,138 @@ def validate_question_artifact_evidence(
     return complete_types
 
 
+def _validate_artifact_surface_policy(
+    policy: dict[str, Any],
+    questions: list[dict[str, Any]],
+    validated_types: list[set[str]],
+    findings: list[Finding],
+) -> None:
+    raw_surfaces = policy.get("assessment_surfaces")
+    if not isinstance(raw_surfaces, dict) or not raw_surfaces:
+        findings.append(
+            Finding(
+                "ERROR",
+                "missing-artifact-assessment-surfaces",
+                "artifact_policy.assessment_surfaces must declare every independently presented practice bank and exam form",
+            )
+        )
+        return
+
+    grouped_indexes: dict[str, list[int]] = defaultdict(list)
+    for index, question in enumerate(questions):
+        question_id = str(question.get("id", "?"))
+        surface = question.get("assessment_surface")
+        if not isinstance(surface, str) or not surface.strip():
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "missing-question-assessment-surface",
+                    f"{question_id}: assessment_surface must identify the independently presented practice bank or exam form",
+                )
+            )
+            continue
+        normalized_surface = surface.strip()
+        if normalized_surface not in raw_surfaces:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "undeclared-question-assessment-surface",
+                    f"{question_id}: assessment_surface {normalized_surface!r} is absent from artifact_policy.assessment_surfaces",
+                )
+            )
+            continue
+        grouped_indexes[normalized_surface].append(index)
+
+    for raw_surface, raw_config in raw_surfaces.items():
+        surface = str(raw_surface).strip()
+        label = f"artifact_policy.assessment_surfaces[{surface!r}]"
+        if not surface:
+            findings.append(Finding("ERROR", "invalid-artifact-assessment-surface", f"{label}: surface id must be non-empty"))
+            continue
+        if not isinstance(raw_config, dict):
+            findings.append(Finding("ERROR", "invalid-artifact-assessment-surface", f"{label} must be an object"))
+            continue
+        total = raw_config.get("total")
+        minimum = raw_config.get("minimum_questions_with_artifacts")
+        if isinstance(total, bool) or not isinstance(total, int) or total <= 0:
+            findings.append(Finding("ERROR", "invalid-artifact-surface-total", f"{label}.total must be a positive integer"))
+            continue
+        indexes = grouped_indexes.get(surface, [])
+        if len(indexes) != total:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "artifact-surface-total-mismatch",
+                    f"{surface}: declared total {total}, found {len(indexes)} questions",
+                )
+            )
+        floor = math.ceil(total * MIN_ARTIFACT_QUESTION_RATIO)
+        if isinstance(minimum, bool) or not isinstance(minimum, int) or not 0 <= minimum <= total:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "invalid-artifact-surface-minimum",
+                    f"{label}.minimum_questions_with_artifacts must be between 0 and {total}",
+                )
+            )
+            effective_minimum = floor
+        else:
+            effective_minimum = max(floor, minimum)
+            if minimum < floor:
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "artifact-surface-minimum-below-floor",
+                        f"{surface}: minimum must be at least {floor} ({MIN_ARTIFACT_QUESTION_RATIO:.0%} of {total}), found {minimum}",
+                    )
+                )
+        artifact_count = sum(1 for index in indexes if validated_types[index])
+        if artifact_count < effective_minimum:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "artifact-surface-count-below-minimum",
+                    f"{surface}: minimum {effective_minimum} option-artifact questions, found {artifact_count}",
+                )
+            )
+
+        raw_type_minimums = raw_config.get("minimum_by_type", {})
+        if not isinstance(raw_type_minimums, dict):
+            findings.append(Finding("ERROR", "invalid-artifact-surface-minimums", f"{label}.minimum_by_type must be an object"))
+            continue
+        actual_by_type: Counter[str] = Counter()
+        for index in indexes:
+            actual_by_type.update(validated_types[index])
+        for raw_type, raw_count in raw_type_minimums.items():
+            artifact_type = str(raw_type)
+            if artifact_type not in ARTIFACT_TYPES:
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "unsupported-artifact-type",
+                        f"{label}.minimum_by_type contains unsupported type {artifact_type!r}",
+                    )
+                )
+                continue
+            if isinstance(raw_count, bool) or not isinstance(raw_count, int) or not 0 <= raw_count <= total:
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "invalid-artifact-surface-minimums",
+                        f"{label}.minimum_by_type[{artifact_type!r}] must be between 0 and {total}",
+                    )
+                )
+                continue
+            if actual_by_type.get(artifact_type, 0) < raw_count:
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "artifact-surface-type-count-below-minimum",
+                        f"{surface}/{artifact_type}: minimum {raw_count}, found {actual_by_type.get(artifact_type, 0)}",
+                    )
+                )
+
+
 def validate_artifact_policy(
     targets: dict[str, Any] | None,
     questions: list[dict[str, Any]],
@@ -1709,8 +1925,10 @@ def validate_artifact_policy(
 
     actual_by_type: Counter[str] = Counter()
     questions_with_artifacts = 0
+    validated_types: list[set[str]] = []
     for question in questions:
         valid_types = validate_question_artifact_evidence(question, findings)
+        validated_types.append(valid_types)
         if valid_types:
             questions_with_artifacts += 1
             actual_by_type.update(valid_types)
@@ -1735,6 +1953,7 @@ def validate_artifact_policy(
                     f"{artifact_type}: minimum {expected_count}, found {actual_count}",
                 )
             )
+    _validate_artifact_surface_policy(policy, questions, validated_types, findings)
 
 
 def validate_sources(questions: list[dict[str, Any]], args: argparse.Namespace, findings: list[Finding]) -> None:
