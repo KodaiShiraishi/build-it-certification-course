@@ -78,6 +78,12 @@ ARTIFACT_VALIDATION_METHODS = {
     "schema_or_dry_run",
     "derived_result_check",
 }
+ARTIFACT_STEM_SCENARIO_FIELDS = (
+    "context",
+    "input_or_state",
+    "expected_observation",
+)
+MIN_ARTIFACT_BINDING_LENGTH = 4
 ARTIFACT_EVIDENCE_KINDS = {
     "exam_guide",
     "official_sample",
@@ -226,7 +232,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--require-artifact-policy",
         action="store_true",
-        help="require official evidence and at least 60%% native, readable option-artifact questions on every assessment surface",
+        help=(
+            "require official evidence and at least 60%% native, readable option-artifact questions "
+            "with artifact-specific stem and explanation bindings on every assessment surface"
+        ),
     )
     parser.add_argument("--review-ledger", type=Path, help="semantic CSV with id,status,reviewer,notes[,question_hash]")
     parser.add_argument("--independent-review-ledger", type=Path, help="independent review CSV with the same columns")
@@ -1136,6 +1145,202 @@ def _artifact_location_text(question: dict[str, Any], location: str) -> str | No
     return None
 
 
+def _artifact_explanation_text(question: dict[str, Any], option_key: str) -> str | None:
+    correct = question.get("correct")
+    correct_keys = {correct} if isinstance(correct, str) else (
+        {str(key) for key in correct} if isinstance(correct, list) else set()
+    )
+    if option_key in correct_keys:
+        explanation = question.get("correct_explanation")
+        return explanation if isinstance(explanation, str) else None
+    wrong = question.get("wrong_explanations")
+    if not isinstance(wrong, dict):
+        return None
+    explanation = wrong.get(option_key)
+    return explanation if isinstance(explanation, str) else None
+
+
+def _artifact_stem_contract_signature(question: dict[str, Any]) -> str | None:
+    selection = question.get("artifact_selection")
+    contract = selection.get("stem_contract") if isinstance(selection, dict) else None
+    scenario = contract.get("scenario") if isinstance(contract, dict) else None
+    if not isinstance(scenario, dict):
+        return None
+    parts: list[str] = []
+    for field in ARTIFACT_STEM_SCENARIO_FIELDS:
+        value = scenario.get(field)
+        if not isinstance(value, str) or not value.strip():
+            return None
+        if field == "expected_observation":
+            parts.append(value)
+    constraints = scenario.get("hard_constraints")
+    if (
+        not isinstance(constraints, list)
+        or not constraints
+        or any(not isinstance(item, str) or not item.strip() for item in constraints)
+    ):
+        return None
+    parts.extend(str(item) for item in constraints)
+    axes = selection.get("decision_axes")
+    if isinstance(axes, list):
+        for axis in axes:
+            if not isinstance(axis, dict):
+                continue
+            name = axis.get("name")
+            if isinstance(name, str):
+                parts.append(name)
+            option_values = axis.get("option_values")
+            if isinstance(option_values, dict):
+                parts.extend(
+                    str(value)
+                    for _, value in sorted(option_values.items(), key=lambda pair: str(pair[0]))
+                )
+    validation = selection.get("validation")
+    candidate_results = validation.get("candidate_results") if isinstance(validation, dict) else None
+    if isinstance(candidate_results, dict):
+        parts.extend(
+            str(value)
+            for _, value in sorted(candidate_results.items(), key=lambda pair: str(pair[0]))
+        )
+    signature = normalize_text("\n".join(parts))
+    return signature or None
+
+
+def _validate_artifact_stem_contract(
+    question: dict[str, Any],
+    selection: dict[str, Any],
+    findings: list[Finding],
+) -> bool:
+    question_id = str(question.get("id", "?"))
+    stem = question.get("stem")
+    contract = selection.get("stem_contract")
+    if not isinstance(contract, dict):
+        findings.append(
+            Finding(
+                "ERROR",
+                "missing-artifact-stem-contract",
+                f"{question_id}: artifact_selection.stem_contract must bind an artifact-specific prompt and scenario to the learner-visible stem",
+            )
+        )
+        return False
+
+    valid = True
+    artifact_request = contract.get("artifact_request")
+    if (
+        not isinstance(artifact_request, str)
+        or len(normalize_exact_text(artifact_request)) < MIN_ARTIFACT_BINDING_LENGTH
+        or not isinstance(stem, str)
+        or artifact_request not in stem
+    ):
+        findings.append(
+            Finding(
+                "ERROR",
+                "artifact-stem-contract-not-visible",
+                f"{question_id}: stem_contract.artifact_request must be a substantive exact substring that asks the learner to select an artifact candidate",
+            )
+        )
+        valid = False
+
+    scenario = contract.get("scenario")
+    if not isinstance(scenario, dict):
+        findings.append(
+            Finding(
+                "ERROR",
+                "missing-artifact-stem-scenario",
+                f"{question_id}: stem_contract.scenario must identify context, input/state, hard constraints, and expected observation",
+            )
+        )
+        valid = False
+    else:
+        for field in ARTIFACT_STEM_SCENARIO_FIELDS:
+            value = scenario.get(field)
+            if (
+                not isinstance(value, str)
+                or len(normalize_exact_text(value)) < MIN_ARTIFACT_BINDING_LENGTH
+                or not isinstance(stem, str)
+                or value not in stem
+            ):
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "artifact-stem-scenario-not-visible",
+                        f"{question_id}: stem_contract.scenario.{field} must be a substantive exact substring of the learner-visible stem",
+                    )
+                )
+                valid = False
+        constraints = scenario.get("hard_constraints")
+        if not isinstance(constraints, list) or not constraints:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "missing-artifact-stem-constraints",
+                    f"{question_id}: stem_contract.scenario.hard_constraints must contain at least one learner-visible constraint",
+                )
+            )
+            valid = False
+        else:
+            normalized_constraints: set[str] = set()
+            for index, constraint in enumerate(constraints, start=1):
+                normalized = normalize_exact_text(constraint) if isinstance(constraint, str) else ""
+                if (
+                    not isinstance(constraint, str)
+                    or len(normalized) < MIN_ARTIFACT_BINDING_LENGTH
+                    or not isinstance(stem, str)
+                    or constraint not in stem
+                ):
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "artifact-stem-constraint-not-visible",
+                            f"{question_id}: hard_constraints[{index}] must be a substantive exact substring of the learner-visible stem",
+                        )
+                    )
+                    valid = False
+                elif normalized in normalized_constraints:
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "duplicate-artifact-stem-constraint",
+                            f"{question_id}: hard_constraints[{index}] duplicates another constraint",
+                        )
+                    )
+                    valid = False
+                else:
+                    normalized_constraints.add(normalized)
+
+    deletion_test = contract.get("deletion_test")
+    if not isinstance(deletion_test, dict):
+        findings.append(
+            Finding(
+                "ERROR",
+                "missing-artifact-deletion-test",
+                f"{question_id}: stem_contract.deletion_test must record the artifact-candidate deletion review",
+            )
+        )
+        valid = False
+    else:
+        if deletion_test.get("artifact_candidates_required") is not True:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "artifact-deletion-test-failed",
+                    f"{question_id}: deletion_test.artifact_candidates_required must be true",
+                )
+            )
+            valid = False
+        reference = deletion_test.get("review_reference")
+        if not isinstance(reference, str) or not reference.strip():
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "missing-artifact-deletion-test-reference",
+                    f"{question_id}: deletion_test.review_reference must identify the recorded review or fixture",
+                )
+            )
+            valid = False
+    return valid
+
+
 def _artifact_fence(content: str) -> tuple[str, str]:
     normalized = content.replace("\r\n", "\n").replace("\r", "\n").strip()
     match = MARKDOWN_FENCE_PATTERN.fullmatch(normalized)
@@ -1231,7 +1436,7 @@ def _has_artifact_structure(artifact_type: str, content: str) -> bool:
 def validate_question_artifact_evidence(
     question: dict[str, Any], findings: list[Finding]
 ) -> set[str]:
-    """Return types backed by validated artifact candidates in every option."""
+    """Return types backed by atomic option, stem, validation, and explanation contracts."""
     question_id = str(question.get("id", "?"))
     artifact_types = question.get("artifact_types")
     if not isinstance(artifact_types, list):
@@ -1453,6 +1658,8 @@ def validate_question_artifact_evidence(
                 )
             )
             selection_valid = False
+        if not _validate_artifact_stem_contract(question, selection, findings):
+            selection_valid = False
 
         axes = selection.get("decision_axes")
         has_distinct_axis = False
@@ -1618,6 +1825,148 @@ def validate_question_artifact_evidence(
                         )
                     )
                     selection_valid = False
+
+        explanation_bindings = selection.get("explanation_bindings")
+        if not isinstance(explanation_bindings, dict) or {
+            str(key) for key in explanation_bindings
+        } != option_keys:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "artifact-explanation-binding-coverage",
+                    f"{question_id}: artifact_selection.explanation_bindings must contain every option key exactly once",
+                )
+            )
+            selection_valid = False
+        else:
+            axis_values_by_option: dict[str, list[str]] = defaultdict(list)
+            raw_axes = selection.get("decision_axes")
+            if isinstance(raw_axes, list):
+                for axis in raw_axes:
+                    option_values = axis.get("option_values") if isinstance(axis, dict) else None
+                    if isinstance(option_values, dict):
+                        for raw_key, raw_value in option_values.items():
+                            if isinstance(raw_value, str) and raw_value.strip():
+                                axis_values_by_option[str(raw_key)].append(raw_value)
+            raw_validation = selection.get("validation")
+            raw_results = raw_validation.get("candidate_results") if isinstance(raw_validation, dict) else None
+            artifact_excerpts: set[str] = set()
+            result_excerpts: set[str] = set()
+            for raw_key, raw_binding in explanation_bindings.items():
+                key = str(raw_key)
+                label = f"{question_id}/artifact_selection.explanation_bindings[{key!r}]"
+                if not isinstance(raw_binding, dict):
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "invalid-artifact-explanation-binding",
+                            f"{label} must be an object",
+                        )
+                    )
+                    selection_valid = False
+                    continue
+                artifact_excerpt = raw_binding.get("artifact_excerpt")
+                result_excerpt = raw_binding.get("result_excerpt")
+                explanation_excerpt = raw_binding.get("explanation_excerpt")
+                fields = {
+                    "artifact_excerpt": artifact_excerpt,
+                    "result_excerpt": result_excerpt,
+                    "explanation_excerpt": explanation_excerpt,
+                }
+                if any(
+                    not isinstance(value, str)
+                    or len(normalize_exact_text(value)) < MIN_ARTIFACT_BINDING_LENGTH
+                    for value in fields.values()
+                ):
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "invalid-artifact-explanation-binding",
+                            f"{label} must contain substantive artifact_excerpt, result_excerpt, and explanation_excerpt text",
+                        )
+                    )
+                    selection_valid = False
+                    continue
+
+                candidate_artifacts = [
+                    candidates[key]
+                    for candidates in valid_evidence_by_type.values()
+                    if key in candidates
+                ]
+                if not any(str(artifact_excerpt) in artifact for artifact in candidate_artifacts):
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "artifact-explanation-binding-artifact-not-visible",
+                            f"{label}.artifact_excerpt is not an exact substring of option {key}'s validated artifact",
+                        )
+                    )
+                    selection_valid = False
+                if str(artifact_excerpt) not in axis_values_by_option.get(key, []):
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "artifact-explanation-binding-not-decisive",
+                            f"{label}.artifact_excerpt must equal one declared decision-axis value for option {key}",
+                        )
+                    )
+                    selection_valid = False
+
+                candidate_result = raw_results.get(key) if isinstance(raw_results, dict) else None
+                if not isinstance(candidate_result, str) or str(result_excerpt) not in candidate_result:
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "artifact-explanation-binding-result-not-validated",
+                            f"{label}.result_excerpt is not an exact substring of option {key}'s validated candidate result",
+                        )
+                    )
+                    selection_valid = False
+
+                explanation = _artifact_explanation_text(question, key)
+                if not isinstance(explanation, str) or str(explanation_excerpt) not in explanation:
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "artifact-explanation-binding-not-visible",
+                            f"{label}.explanation_excerpt is not an exact substring of the keyed learner-visible explanation",
+                        )
+                    )
+                    selection_valid = False
+                elif (
+                    str(artifact_excerpt) not in str(explanation_excerpt)
+                    or str(result_excerpt) not in str(explanation_excerpt)
+                ):
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "artifact-explanation-binding-incomplete",
+                            f"{label}.explanation_excerpt must include both the decisive artifact slice and validated result slice",
+                        )
+                    )
+                    selection_valid = False
+
+                artifact_excerpts.add(normalize_exact_text(str(artifact_excerpt)))
+                result_excerpts.add(normalize_exact_text(str(result_excerpt)))
+
+            if len(artifact_excerpts) != len(option_keys):
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "artifact-explanation-artifacts-not-distinct",
+                        f"{question_id}: each option explanation must cite a distinct decisive artifact slice",
+                    )
+                )
+                selection_valid = False
+            if len(result_excerpts) != len(option_keys):
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "artifact-explanation-results-not-distinct",
+                        f"{question_id}: each option explanation must cite a distinct validated candidate result",
+                    )
+                )
+                selection_valid = False
 
     if question_type not in {"single_choice", "multiple_response"} or not selection_valid:
         return set()
@@ -1926,12 +2275,30 @@ def validate_artifact_policy(
     actual_by_type: Counter[str] = Counter()
     questions_with_artifacts = 0
     validated_types: list[set[str]] = []
+    scenario_contracts: dict[str, list[str]] = defaultdict(list)
     for question in questions:
         valid_types = validate_question_artifact_evidence(question, findings)
         validated_types.append(valid_types)
         if valid_types:
             questions_with_artifacts += 1
             actual_by_type.update(valid_types)
+            signature = _artifact_stem_contract_signature(question)
+            if signature is not None:
+                scenario_contracts[signature].append(str(question.get("id", "?")))
+
+    for question_ids in scenario_contracts.values():
+        if len(question_ids) > 1:
+            ordered_ids = sorted(question_ids)
+            preview = ordered_ids[:10]
+            suffix = f" (+{len(ordered_ids) - len(preview)} more)" if len(ordered_ids) > len(preview) else ""
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "artifact-scenario-contract-reused",
+                    "artifact-native questions reuse the same normalized "
+                    f"constraints/observation/decision/results contract: {preview}{suffix}",
+                )
+            )
 
     effective_minimum = max(global_floor, minimum_any or 0)
     if questions_with_artifacts < effective_minimum:

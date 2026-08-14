@@ -18,11 +18,101 @@
 
 問題生成元を直接置き換えず、検証用に一問一行のUTF-8 JSONLを書き出す。
 
+見やすさのため次は整形している。実際のJSONLでは一問を一行へSerializeする。
+
 ```json
-{"id":"IAM-001","question_set":"practice","assessment_surface":"practice-bank","objective":"IAM.1","difficulty":"medium","cognitive_type":"application","question_type":"single_choice","artifact_types":["configuration"],"stem":"Which policy statement denies object deletion while allowing other actions?","options":{"A":"{\n  \"Effect\": \"Deny\",\n  \"Action\": \"s3:DeleteObject\"\n}","B":"{\n  \"Effect\": \"Allow\",\n  \"Action\": \"s3:DeleteObject\"\n}"},"correct":"A","rendered_correct":"A","artifact_evidence":[{"type":"configuration","location":"option:A","content":"{\n  \"Effect\": \"Deny\",\n  \"Action\": \"s3:DeleteObject\"\n}","decision_binding":"Effect Deny and Action s3:DeleteObject implement the required denial."},{"type":"configuration","location":"option:B","content":"{\n  \"Effect\": \"Allow\",\n  \"Action\": \"s3:DeleteObject\"\n}","decision_binding":"Effect Allow grants the operation instead of denying it."}],"artifact_selection":{"task":"select_correct_artifact","requirement":"Deny s3:DeleteObject without granting it.","decision_axes":[{"name":"policy effect","option_values":{"A":"\"Effect\": \"Deny\"","B":"\"Effect\": \"Allow\""}}],"validation":{"method":"schema_or_dry_run","reference":"tests/iam_policy_candidates.py::test_delete_effect","validated_correct":["A"],"candidate_results":{"A":"Simulator returns explicitDeny for s3:DeleteObject.","B":"Simulator returns allowed for s3:DeleteObject."}}},"correct_explanation":"...","wrong_explanations":{"B":"..."},"links":["../iam/#policy-evaluation"],"sources":["https://docs.example.com/iam/policy-evaluation"],"source_reviewed_at":"2026-07-18"}
+{
+  "id": "IAM-001",
+  "question_set": "practice",
+  "assessment_surface": "practice-bank",
+  "objective": "IAM.1",
+  "difficulty": "medium",
+  "cognitive_type": "application",
+  "question_type": "single_choice",
+  "artifact_types": ["configuration"],
+  "stem": "An operator must deny object deletion. Which JSON policy candidate produces an explicit deny for s3:DeleteObject?",
+  "options": {
+    "A": "{\n  \"Effect\": \"Deny\",\n  \"Action\": \"s3:DeleteObject\"\n}",
+    "B": "{\n  \"Effect\": \"Allow\",\n  \"Action\": \"s3:DeleteObject\"\n}"
+  },
+  "correct": "A",
+  "rendered_correct": "A",
+  "correct_explanation": "With `\"Effect\": \"Deny\"`, the simulator returns explicitDeny, so A enforces the required deletion boundary.",
+  "wrong_explanations": {
+    "B": "With `\"Effect\": \"Allow\"`, the simulator returns allowed, so B grants the action instead of denying it."
+  },
+  "artifact_evidence": [
+    {
+      "type": "configuration",
+      "location": "option:A",
+      "content": "{\n  \"Effect\": \"Deny\",\n  \"Action\": \"s3:DeleteObject\"\n}",
+      "decision_binding": "Effect Deny implements the required denial."
+    },
+    {
+      "type": "configuration",
+      "location": "option:B",
+      "content": "{\n  \"Effect\": \"Allow\",\n  \"Action\": \"s3:DeleteObject\"\n}",
+      "decision_binding": "Effect Allow grants the operation."
+    }
+  ],
+  "artifact_selection": {
+    "task": "select_correct_artifact",
+    "requirement": "Deny s3:DeleteObject without granting it.",
+    "stem_contract": {
+      "artifact_request": "Which JSON policy candidate",
+      "scenario": {
+        "context": "An operator must deny object deletion",
+        "input_or_state": "object deletion",
+        "hard_constraints": ["explicit deny"],
+        "expected_observation": "produces an explicit deny for s3:DeleteObject"
+      },
+      "deletion_test": {
+        "artifact_candidates_required": true,
+        "review_reference": "reviews/artifact-deletion.csv#IAM-001"
+      }
+    },
+    "decision_axes": [
+      {
+        "name": "policy effect",
+        "option_values": {
+          "A": "\"Effect\": \"Deny\"",
+          "B": "\"Effect\": \"Allow\""
+        }
+      }
+    ],
+    "validation": {
+      "method": "schema_or_dry_run",
+      "reference": "tests/iam_policy_candidates.py::test_delete_effect",
+      "validated_correct": ["A"],
+      "candidate_results": {
+        "A": "simulator returns explicitDeny",
+        "B": "simulator returns allowed"
+      }
+    },
+    "explanation_bindings": {
+      "A": {
+        "artifact_excerpt": "\"Effect\": \"Deny\"",
+        "result_excerpt": "returns explicitDeny",
+        "explanation_excerpt": "With `\"Effect\": \"Deny\"`, the simulator returns explicitDeny"
+      },
+      "B": {
+        "artifact_excerpt": "\"Effect\": \"Allow\"",
+        "result_excerpt": "returns allowed",
+        "explanation_excerpt": "With `\"Effect\": \"Allow\"`, the simulator returns allowed"
+      }
+    }
+  },
+  "links": ["../iam/#policy-evaluation"],
+  "sources": ["https://docs.example.com/iam/policy-evaluation"],
+  "source_reviewed_at": "2026-07-18"
+}
 ```
 
-基本必須項目は `id`、`objective`、`difficulty`、`cognitive_type`、`stem`、`options`、`correct`、`correct_explanation`、`wrong_explanations`、`links` とする。`question_set`、`assessment_surface`、`question_type`、`sources`、`source_reviewed_at`、`artifact_types`、`artifact_evidence` は最終検査で必須化する。`question_set`は通常問題を `practice`、模擬問題を `mock` として一問ごとに保持し、`assessment_surface`は `practice-bank`、`practice-exam-a`、`practice-exam-b`等、学習者が独立して開始・採点できる表示単位を保持する。`links`は関連講義または用語、`sources`は正答を支える公式一次情報として分ける。`artifact_types` は60%へ算入するOption Artifactを [exam-question-fidelity.md](exam-question-fidelity.md) の共通分類で保持し、Stem-onlyまたは概念問題は空Listにする。算入問題の `artifact_evidence` は各宣言Typeと全Optionの組合せにつき一件を持ち、`type`、`location`（`option:<key>`のみ）、その候補にExact substringとして存在する `content`、判断に必要な行・Field・Operator・値・関係を示す候補固有の `decision_binding` を保持する。さらに `artifact_selection` に `task: select_correct_artifact`、要求、全Optionを覆うDecision axis、共通Fixture／Schema／Dry run／導出検査のReference、候補別結果、検証済み正答集合を持たせる。概念問題とStem-only問題は `artifact_types: []`、`artifact_evidence: []` にする。
+基本必須項目は `id`、`objective`、`difficulty`、`cognitive_type`、`stem`、`options`、`correct`、`correct_explanation`、`wrong_explanations`、`links` とする。`question_set`、`assessment_surface`、`question_type`、`sources`、`source_reviewed_at`、`artifact_types`、`artifact_evidence` は最終検査で必須化する。`question_set`は通常問題を `practice`、模擬問題を `mock` として一問ごとに保持し、`assessment_surface`は `practice-bank`、`practice-exam-a`、`practice-exam-b`等、学習者が独立して開始・採点できる表示単位を保持する。`links`は関連講義または用語、`sources`は正答を支える公式一次情報として分ける。`artifact_types` は60%へ算入するOption Artifactを [exam-question-fidelity.md](exam-question-fidelity.md) の共通分類で保持し、Stem-onlyまたは概念問題は空Listにする。算入問題の `artifact_evidence` は各宣言Typeと全Optionの組合せにつき一件を持ち、`type`、`location`（`option:<key>`のみ）、その候補にExact substringとして存在する `content`、判断に必要な行・Field・Operator・値・関係を示す候補固有の `decision_binding` を保持する。さらに `artifact_selection` に `task: select_correct_artifact`、要求、全Optionを覆うDecision axis、共通Fixture／Schema／Dry run／導出検査のReference、候補別結果、検証済み正答集合、Artifact固有の `stem_contract`、全Optionの `explanation_bindings` を持たせる。概念問題とStem-only問題は `artifact_types: []`、`artifact_evidence: []` にする。
+
+`stem_contract` は、learner-visible StemにExact substringとして存在する `artifact_request` と、`scenario.context`、`scenario.input_or_state`、一件以上の `scenario.hard_constraints`、`scenario.expected_observation` を保持する。`deletion_test.artifact_candidates_required` を `true` にし、候補を隠すと解けないことを確認したReview／Fixtureを `review_reference` へ記録する。ValidatorはHard constraint、期待する観測、Decision axis、候補別結果を数値正規化したSignatureとしてBank全体で比較する。Actor、ID、数値Literal、背景文だけを変えて同じ判断を再利用したArtifact問題を拒否する。
+
+`explanation_bindings` は全Option Keyを一度ずつ持つ。各Optionの `artifact_excerpt` はその候補内に存在しDecision axisの値と一致し、`result_excerpt` は共通検証の当該 `candidate_results` に存在し、`explanation_excerpt` はKeyedされた正答または誤答解説に存在して両Excerptを含む。これにより、候補Artifactだけを更新して旧Text問題の解説を残す変更、正答解説だけ更新して誤答解説を放置する変更、全候補へ同じ汎用結果を付ける変更を失敗させる。Text問題から変換するときは旧本文をBaseline hashまたは監査用非表示Sourceとしてだけ保持し、learner-visible Stem／解説へ連結しない。
 
 `correct`は問題形式に合わせる。
 
@@ -138,7 +228,7 @@ IAM-009,removed,ユーザーが重複問題の削除を明示,user-message-2026-
 }
 ```
 
-実際には公式試験目標をすべて列挙する。`total` と実数の不一致に加え、目標数、許可されない問題形式、形式別件数、難易度、思考タイプと実数の不一致はエラーにする。公式ガイドが形式別比率を公開していない場合も、`allowed_question_types`には公式に許可された形式を、`question_types`には教材として設計した件数を入れ、その配分理由を別途記録する。`artifact_policy.calibration_evidence` には現行公式ガイドと公式Sample／Practiceの調査結果を含め、Login必須、未発見、旧版もStatusとして残す。`artifact_policy.assessment_surfaces`へ公開Navigation上の全独立問題面と各総数・最低数を宣言し、各問の `assessment_surface` と完全一致させる。全体と各Surfaceの `minimum_questions_with_artifacts` は少なくとも `ceil(total × 0.60)` とし、65問なら39問未満を許可しない。最終検査では `--require-course-count-policy`、`--require-metadata-targets`、`--require-artifact-policy` を使い、Question Set、Assessment Surface、Level、根拠、Count Mode、標準件数またはユーザー指定、問題形式、難易度、思考タイプ、公式Calibration Evidence、各宣言Typeの全Option `artifact_evidence`、有効な `artifact_selection`、検証済み正答集合、Surface別60%下限、種類別最低数の省略・不一致を失敗にする。Stem-only、候補不足、同一候補、結果差なし、架空Wrapper、100文字超の行、Raw Mermaidは件数へ数えない。
+実際には公式試験目標をすべて列挙する。`total` と実数の不一致に加え、目標数、許可されない問題形式、形式別件数、難易度、思考タイプと実数の不一致はエラーにする。公式ガイドが形式別比率を公開していない場合も、`allowed_question_types`には公式に許可された形式を、`question_types`には教材として設計した件数を入れ、その配分理由を別途記録する。`artifact_policy.calibration_evidence` には現行公式ガイドと公式Sample／Practiceの調査結果を含め、Login必須、未発見、旧版もStatusとして残す。`artifact_policy.assessment_surfaces`へ公開Navigation上の全独立問題面と各総数・最低数を宣言し、各問の `assessment_surface` と完全一致させる。全体と各Surfaceの `minimum_questions_with_artifacts` は少なくとも `ceil(total × 0.60)` とし、65問なら39問未満を許可しない。最終検査では `--require-course-count-policy`、`--require-metadata-targets`、`--require-artifact-policy` を使い、Question Set、Assessment Surface、Level、根拠、Count Mode、標準件数またはユーザー指定、問題形式、難易度、思考タイプ、公式Calibration Evidence、各宣言Typeの全Option `artifact_evidence`、有効な `artifact_selection`、`stem_contract`、全Optionの `explanation_bindings`、検証済み正答集合、Surface別60%下限、種類別最低数の省略・不一致を失敗にする。Stem-only、候補不足、同一候補、結果差なし、再利用Scenario契約、候補と一致しない旧解説、架空Wrapper、100文字超の行、Raw Mermaidは件数へ数えない。
 
 模擬試験の目標ファイルには `question_set: "mock"` と模擬問題だけの `total`、各分布、各Practice／Mock formの `assessment_surfaces`を入れ、各問にも `question_set: "mock"` と対応する `assessment_surface` を持たせる。同じ `--require-course-count-policy --require-artifact-policy` で集合分離、件数、各Formの60%を検査するが、`credential_level`、`count_mode`、500／1,000問の標準は適用しない。別JSONLへ分ける場合も各Formへ個別に両Gateを実行し、一つの模擬試験だけの成功を全Formの成功とみなさない。
 
@@ -251,6 +341,7 @@ Windowsで成功しても、公開CIがLinuxならCI上でも同じ検査を実�
 - 問題形式、正答集合・順序・対応関係、Rendered Answerの一致
 - 公式Source、確認日、許可Host
 - 公式ガイドと公式Sample／Practiceの調査状態、全問のAssessment SurfaceとOption Artifact分類、全候補Evidence・決定差分・候補検証に合格したArtifact-native選択問題が各Surfaceの60%以上であること、Stem-only／架空Wrapper非算入、種類別最低数
+- Artifact固有のStem契約、Scenario contractの一意性、全Optionの候補差分／検証結果／正誤解説Binding、候補変更後の旧解説が0件であること
 - Artifact Sourceの100文字行長、生成HTMLのMermaid container、実DOMのSVG描画と390px横Overflow
 - 重複ID、問題文、解説
 - 高類似閾値と判定方法

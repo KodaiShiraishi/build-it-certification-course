@@ -134,6 +134,10 @@
 - [ ] 全問に `assessment_surface` があり、通常問題集、Practice Exam A／B、各Mockなど学習者が独立して受ける全SurfaceをTargetsへ列挙している
 - [ ] 全OptionにArtifact候補があり、要件を満たす正しい候補を選ばせる検証済み問題を各Assessment surfaceの60%以上にし、現行公式EvidenceからSurface／種類別最低数を設計している。全Surface合算やStem-only Artifact問題を60%へ数えていない
 - [ ] 算入問題の全宣言Typeについて全 `option:<key>` のExact `artifact_evidence`、候補固有Binding、有効な `artifact_selection`、共通Fixture／Schema／Dry run／導出検査の候補別結果と検証済み正答集合を `--require-artifact-policy` で検査している
+- [ ] Text問題からArtifact問題へ変換した問は、候補だけを旧問題へ被せず、Stem、全候補、正答集合、正答解説、全誤答解説、Evidence、選択契約を原子的に再作成している。旧本文はBaseline／監査用の非表示Sourceにだけ残し、learner-visible Stem／解説へ連結していない
+- [ ] 全算入問題の `artifact_selection.stem_contract` がArtifact選択要求、Context、入力／状態、Hard constraint、期待する観測のExact learner-visible sliceとDeletion test Referenceを保持する。一般的な旧Stem、末尾だけをArtifact選択へ変えたStem、同じ正規化Scenario contractの再利用が0件である
+- [ ] 全算入問題の `artifact_selection.explanation_bindings` が全Optionを覆い、各候補の決定差分、共通検証の候補別結果、それらを含む正答または誤答解説をExact sliceで結んでいる。候補変更後の旧解説、候補に存在しないService／Architecture判断、全候補共通の汎用理由が0件である
+- [ ] Artifact候補、候補別結果、Stem、正答または誤答解説のいずれかを変更した問は、問題Hash、意味Review、独立Reviewを同じ変更単位で更新している
 - [ ] Artifact件数を `format`、Family、Filename、説明文、自己申告Label、Stem Artifact、Code fenceの見た目から数えず、全候補Coverageと選択契約に合格したEvidenceだけを集計し、生成Markdown／HTMLにも全OptionのExact Evidenceが残ることを照合している
 - [ ] 構築、開発、Data変換、診断、運用を測る資格では、Code、Command、Configuration、Structured data、入力・出力表、Log／Metric等が正答判断に必要な問題を十分に含めている
 - [ ] 全ObjectiveとGenerator familyを横断してOption Artifact削除テストを行い、候補Artifactを隠してもStem、Option label、周辺Proseの手掛かりだけで解ける問をArtifact件数から除外または修正している
@@ -167,6 +171,7 @@
 - [ ] 正解理由と、すべての誤答が不適切な固有理由がある
 - [ ] Stem、全候補、正答・誤答解説に現れるService正式名・正規aliasが、正答役割に関係なく同じ規則で固有Service Entryへ直接Linkされている
 - [ ] Artifact正答解説が正答だけを分けるField・Operator・値・Identity境界・実行順を示し、誤答にも共通するContainer名やAPI名、`X == Y`の比較、汎用Tokenだけを決定Evidenceとしていない
+- [ ] Artifact誤答解説が各候補固有のMutationとFixture／Dry run／導出で観測した失敗結果を説明し、Text問題時代の選択肢理由や別候補の挙動を説明していない
 - [ ] 解説の正規化済み文・句・完全一致をBank／Family／Correct role別に集計し、候補固有文の後へ同じ汎用接頭辞・末尾を大量反復して説明固有性を水増ししていない。機械可読な差分Labelは技術解説件数へ数えていない
 - [ ] Stem、補足条件、Key decision factor、Hintと解説をField横断で比較し、正答理由や複数誤答の失敗理由を解答前に逐語・ほぼ同文で列挙していない。判断軸と、解答後に示す候補別診断を分離している
 - [ ] 本文の丸写し、言い換え問題、定型解説で水増ししていない
@@ -245,6 +250,7 @@
 - [ ] 固有Service-entry数、公式／Assessment Inventory差分、固定Anchor／Landing直接Link数、全11 Dimension合格Entry数、Assessment named-service Binding数を報告している
 - [ ] 正規Service alias数、講義・Stem・Option・解説別の直接Link数、裸／曖昧／誤Link数、Service mention Link Gateと生成HTML Gateの結果を報告している
 - [ ] 公式Sample／Practiceの確認状態とAccess制約、各Assessment surfaceの総数・最低数・60%へ算入したArtifact-native Option Artifact問題数と種類別件数、Stem-only／架空Wrapper非算入数、候補検証・行長・Mermaid描画・横Overflow不合格数を報告している
+- [ ] Artifact固有Stem契約、Scenario contract重複、全Option解説Binding、候補と不一致の旧解説の検査件数・不合格数を報告している
 - [ ] 変更しなかった保護対象を報告している
 - [ ] 公開URL、ソース、生成元、再検証方法を示している
 - [ ] ソースリポジトリのVisibilityを示している

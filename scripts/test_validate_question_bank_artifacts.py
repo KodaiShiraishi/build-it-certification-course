@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import sys
 import math
 from collections import Counter
@@ -63,6 +64,46 @@ def validate_policy(questions: list[dict[str, Any]], minimum: int) -> set[str]:
     return {finding.code for finding in findings}
 
 
+def question_variant(
+    question: dict[str, Any],
+    question_id: str,
+    assessment_surface: str | None = None,
+) -> dict[str, Any]:
+    variant = copy.deepcopy(question)
+    digit_words = {
+        "0": "zero",
+        "1": "one",
+        "2": "two",
+        "3": "three",
+        "4": "four",
+        "5": "five",
+        "6": "six",
+        "7": "seven",
+        "8": "eight",
+        "9": "nine",
+    }
+    contract_token = "".join(digit_words.get(character, character) for character in question_id)
+    original_context = variant["artifact_selection"]["stem_contract"]["scenario"]["context"]
+    variant_context = f"{original_context} for scenario {question_id}"
+    original_observation = variant["artifact_selection"]["stem_contract"]["scenario"][
+        "expected_observation"
+    ]
+    variant_observation = f"{original_observation} for contract {contract_token}"
+    variant["id"] = question_id
+    variant["stem"] = variant["stem"].replace(original_context, variant_context)
+    variant["stem"] = variant["stem"].replace(original_observation, variant_observation)
+    variant["artifact_selection"]["stem_contract"]["scenario"]["context"] = variant_context
+    variant["artifact_selection"]["stem_contract"]["scenario"][
+        "expected_observation"
+    ] = variant_observation
+    variant["artifact_selection"]["stem_contract"]["deletion_test"]["review_reference"] = (
+        f"reviews/artifact-deletion.csv#{question_id}"
+    )
+    if assessment_surface is not None:
+        variant["assessment_surface"] = assessment_surface
+    return variant
+
+
 def main() -> int:
     code_a = "```python\nresponse = glue.start_job_run(JobName=job_name)\nreturn response['JobRunId']\n```"
     code_b = "```python\nresponse = glue.get_job_run(JobName=job_name, RunId=job_name)\nreturn response['JobRun']['Id']\n```"
@@ -71,9 +112,22 @@ def main() -> int:
         "assessment_surface": "practice-bank",
         "question_type": "single_choice",
         "artifact_types": ["code"],
-        "stem": "Which implementation starts the named AWS Glue job and returns the new run ID?",
+        "stem": (
+            "An application invokes AWS Glue and has the job name. Which Python implementation "
+            "starts exactly one job run and returns the new JobRunId?"
+        ),
         "options": {"A": code_a, "B": code_b},
         "correct": "A",
+        "correct_explanation": (
+            "`start_job_run` records one start call and returns jr-123, so option A starts the "
+            "requested run and exposes the newly created JobRunId."
+        ),
+        "wrong_explanations": {
+            "B": (
+                "`get_job_run` records no start_job_run call and only attempts to read an existing "
+                "run, so option B cannot create the requested run."
+            )
+        },
         "artifact_evidence": [
             {
                 "type": "code",
@@ -91,6 +145,19 @@ def main() -> int:
         "artifact_selection": {
             "task": "select_correct_artifact",
             "requirement": "Start the named job and return the newly created run identifier.",
+            "stem_contract": {
+                "artifact_request": "Which Python implementation",
+                "scenario": {
+                    "context": "An application invokes AWS Glue",
+                    "input_or_state": "has the job name",
+                    "hard_constraints": ["starts exactly one job run"],
+                    "expected_observation": "returns the new JobRunId",
+                },
+                "deletion_test": {
+                    "artifact_candidates_required": True,
+                    "review_reference": "reviews/artifact-deletion.csv#PASS-CODE-001",
+                },
+            },
             "decision_axes": [
                 {
                     "name": "AWS Glue operation",
@@ -106,11 +173,91 @@ def main() -> int:
                     "B": "Attempts to read a run and records no start_job_run call.",
                 },
             },
+            "explanation_bindings": {
+                "A": {
+                    "artifact_excerpt": "start_job_run",
+                    "result_excerpt": "returns jr-123",
+                    "explanation_excerpt": (
+                        "`start_job_run` records one start call and returns jr-123, so option A "
+                        "starts the requested run and exposes the newly created JobRunId."
+                    ),
+                },
+                "B": {
+                    "artifact_excerpt": "get_job_run",
+                    "result_excerpt": "records no start_job_run call",
+                    "explanation_excerpt": (
+                        "`get_job_run` records no start_job_run call and only attempts to read an "
+                        "existing run, so option B cannot create the requested run."
+                    ),
+                },
+            },
         },
     }
     valid_types, codes = validate(valid_question)
     assert valid_types == {"code"} and not codes, (valid_types, codes)
     assert not validate_policy([valid_question], 1)
+
+    stale_correct_explanation = copy.deepcopy(valid_question)
+    stale_correct_explanation["id"] = "FAIL-STALE-CORRECT-EXPLANATION-001"
+    stale_correct_explanation["correct_explanation"] = (
+        "The former prose answer was appropriate because it followed the preferred service "
+        "architecture and met the general requirement."
+    )
+    valid_types, codes = validate(stale_correct_explanation)
+    assert not valid_types and "artifact-explanation-binding-not-visible" in codes, (
+        valid_types,
+        codes,
+    )
+
+    stale_wrong_explanation = copy.deepcopy(valid_question)
+    stale_wrong_explanation["id"] = "FAIL-STALE-WRONG-EXPLANATION-001"
+    stale_wrong_explanation["wrong_explanations"]["B"] = (
+        "The former prose option is less suitable because it does not follow the recommended "
+        "architecture for the scenario."
+    )
+    valid_types, codes = validate(stale_wrong_explanation)
+    assert not valid_types and "artifact-explanation-binding-not-visible" in codes, (
+        valid_types,
+        codes,
+    )
+
+    legacy_generic_stem = copy.deepcopy(valid_question)
+    legacy_generic_stem["id"] = "FAIL-LEGACY-GENERIC-STEM-001"
+    legacy_generic_stem["stem"] = (
+        "A team needs to start an AWS Glue job. Which general approach is best?"
+    )
+    valid_types, codes = validate(legacy_generic_stem)
+    assert not valid_types and "artifact-stem-contract-not-visible" in codes, (
+        valid_types,
+        codes,
+    )
+    assert "artifact-stem-scenario-not-visible" in codes, codes
+
+    changed_candidate_with_stale_explanation = copy.deepcopy(valid_question)
+    changed_candidate_with_stale_explanation["id"] = "FAIL-CHANGED-CANDIDATE-STALE-EXPLANATION-001"
+    changed_code_a = code_a.replace("start_job_run", "stop_job_run")
+    changed_candidate_with_stale_explanation["options"]["A"] = changed_code_a
+    changed_candidate_with_stale_explanation["artifact_evidence"][0]["content"] = changed_code_a
+    changed_candidate_with_stale_explanation["artifact_selection"]["decision_axes"][0][
+        "option_values"
+    ]["A"] = "stop_job_run"
+    valid_types, codes = validate(changed_candidate_with_stale_explanation)
+    assert not valid_types and "artifact-explanation-binding-artifact-not-visible" in codes, (
+        valid_types,
+        codes,
+    )
+
+    reused_contract = copy.deepcopy(valid_question)
+    reused_contract["id"] = "FAIL-REUSED-SCENARIO-CONTRACT-002"
+    reused_contract["stem"] = reused_contract["stem"].replace(
+        "An application invokes AWS Glue",
+        "A different application invokes AWS Glue",
+    )
+    reused_contract["artifact_selection"]["stem_contract"]["scenario"]["context"] = (
+        "A different application invokes AWS Glue"
+    )
+    policy_codes = validate_policy([valid_question, reused_contract], 2)
+    assert "artifact-scenario-contract-reused" in policy_codes, policy_codes
 
     label_only_question = {
         "id": "FAIL-LABEL-ONLY-001",
@@ -138,14 +285,8 @@ def main() -> int:
         }
         for index in range(1, 4)
     ]
-    second_artifact = {
-        **valid_question,
-        "id": "PASS-CODE-002",
-    }
-    third_artifact = {
-        **valid_question,
-        "id": "PASS-CODE-003",
-    }
+    second_artifact = question_variant(valid_question, "PASS-CODE-002")
+    third_artifact = question_variant(valid_question, "PASS-CODE-003")
     exact_floor_questions = [valid_question, second_artifact, third_artifact, *conceptual_questions[:2]]
     assert not validate_policy(exact_floor_questions, 3)
 
@@ -154,7 +295,10 @@ def main() -> int:
     assert "artifact-minimum-below-global-floor" in policy_codes, policy_codes
     assert "artifact-question-count-below-minimum" in policy_codes, policy_codes
 
-    sixty_artifacts = [valid_question | {"id": f"ARTIFACT-{index:03d}"} for index in range(1, 61)]
+    sixty_artifacts = [
+        question_variant(valid_question, f"ARTIFACT-{index:03d}")
+        for index in range(1, 61)
+    ]
     forty_concepts = [conceptual_questions[0] | {"id": f"CONCEPT-100-{index:03d}"} for index in range(1, 41)]
     assert not validate_policy([*sixty_artifacts, *forty_concepts], 60)
 
@@ -341,9 +485,23 @@ spec:
         "assessment_surface": "practice-bank",
         "question_type": "single_choice",
         "artifact_types": ["diagram_ui"],
-        "stem": "Which diagram routes object creation events?",
+        "stem": (
+            "An event-routing team receives Amazon S3 object creation events. Which Mermaid "
+            "architecture diagram sends each event through Amazon EventBridge and shows the "
+            "ObjectCreated edge?"
+        ),
         "options": {"A": raw_diagram_a, "B": raw_diagram_b},
         "correct": "A",
+        "correct_explanation": (
+            "`ObjectCreated` is the decisive edge; the shared derivation confirms that the edge "
+            "routes ObjectCreated events through Amazon EventBridge."
+        ),
+        "wrong_explanations": {
+            "B": (
+                "`Schedule` is the decisive edge; the shared derivation shows that the edge routes "
+                "a scheduled event rather than an Amazon S3 object creation event."
+            )
+        },
         "artifact_evidence": [
             {
                 "type": "diagram_ui",
@@ -361,6 +519,19 @@ spec:
         "artifact_selection": {
             "task": "select_correct_artifact",
             "requirement": "Route S3 object creation events through EventBridge.",
+            "stem_contract": {
+                "artifact_request": "Which Mermaid architecture diagram",
+                "scenario": {
+                    "context": "An event-routing team receives Amazon S3 object creation events",
+                    "input_or_state": "Amazon S3 object creation events",
+                    "hard_constraints": ["sends each event through Amazon EventBridge"],
+                    "expected_observation": "shows the ObjectCreated edge",
+                },
+                "deletion_test": {
+                    "artifact_candidates_required": True,
+                    "review_reference": "reviews/artifact-deletion.csv#FAIL-RAW-MERMAID-001",
+                },
+            },
             "decision_axes": [
                 {"name": "event edge", "option_values": {"A": "ObjectCreated", "B": "Schedule"}}
             ],
@@ -368,7 +539,28 @@ spec:
                 "method": "derived_result_check",
                 "reference": "tests/event_diagrams.py::test_candidates",
                 "validated_correct": ["A"],
-                "candidate_results": {"A": "Routes ObjectCreated.", "B": "Routes a schedule."},
+                "candidate_results": {
+                    "A": "edge routes ObjectCreated events",
+                    "B": "edge routes a scheduled event",
+                },
+            },
+            "explanation_bindings": {
+                "A": {
+                    "artifact_excerpt": "ObjectCreated",
+                    "result_excerpt": "edge routes ObjectCreated events",
+                    "explanation_excerpt": (
+                        "`ObjectCreated` is the decisive edge; the shared derivation confirms that "
+                        "the edge routes ObjectCreated events through Amazon EventBridge."
+                    ),
+                },
+                "B": {
+                    "artifact_excerpt": "Schedule",
+                    "result_excerpt": "edge routes a scheduled event",
+                    "explanation_excerpt": (
+                        "`Schedule` is the decisive edge; the shared derivation shows that the edge "
+                        "routes a scheduled event rather than an Amazon S3 object creation event."
+                    ),
+                },
             },
         },
     }
@@ -397,10 +589,18 @@ spec:
     assert valid_types == {"diagram_ui"} and not codes, (valid_types, codes)
 
     surface_a = [
-        valid_question | {"id": f"SURFACE-A-{index:03d}", "assessment_surface": "practice-exam-a"}
+        question_variant(
+            valid_question,
+            f"SURFACE-A-{index:03d}",
+            "practice-exam-a",
+        )
         for index in range(1, 6)
     ]
-    surface_b_artifact = valid_question | {"id": "SURFACE-B-001", "assessment_surface": "practice-exam-b"}
+    surface_b_artifact = question_variant(
+        valid_question,
+        "SURFACE-B-001",
+        "practice-exam-b",
+    )
     surface_b_concepts = [
         {
             **conceptual_questions[0],
@@ -486,7 +686,10 @@ spec:
     valid_types, codes = validate(conceptual_question)
     assert not valid_types and not codes, (valid_types, codes)
 
-    print("Artifact evidence regression tests: PASS (per-surface 60%, native artifacts, readability, and Mermaid rendering)")
+    print(
+        "Artifact evidence regression tests: PASS (per-surface 60%, atomic stem/explanation "
+        "bindings, native artifacts, readability, and Mermaid rendering)"
+    )
     return 0
 
 

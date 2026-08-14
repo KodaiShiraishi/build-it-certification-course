@@ -48,6 +48,8 @@
 - 製品仕様に依存する正答は、公式ドキュメントと対象バージョンを確認する。
 - 本文の一文をそのまま探すだけで解ける問題に偏らせない。
 - 60%へ数えるCodeや設定の問題では、Stemに要件と必要な前提だけを置き、全選択肢へ同じArtifact種別・粒度の実在可能な候補を提示する。各宣言Typeを全 `option:<key>` 内のExact learner-visible sliceと候補固有の `decision_binding` を持つ `artifact_evidence` へ対応付ける。StemだけのCode block、Optionの一部だけのArtifact、`format`、Family、Filename、説明文、`artifact_types` の自己申告を件数へ数えない。
+- Text問題をOption Artifact問題へ変換する場合は、旧問題へ候補だけを重ねず、Stem、全候補、正答集合、正答解説、全誤答解説、Evidence、選択契約を一つの原子的単位として再作成する。Stemを、候補Artifactから判断できるContext、入力／状態、Hard constraint、期待する観測とArtifact選択要求へ書き直し、一般的な旧StemやService選択時代の問いを残さない。
+- `artifact_selection.stem_contract` にArtifact選択要求とScenario各要素のExact learner-visible slice、Artifact候補を隠すDeletion testのReferenceを保持する。Hard constraint、期待する観測、Decision axis、候補別結果を正規化したContractをBank全体で一意にし、Actor名、ID、数値Literal、Option順、背景文だけを変えたStemを別問題として数えない。
 - Artifactを平文へ戻しても判断が変わらない場合はText問題にする。架空のCourse Schema、`*Candidate`、`services`／`operations`／`controls`／`flow`の汎用Wrapper、正答条件をCommentや配列へ直列化しただけのCode／YAML／JSONをArtifact問題へ分類しない。
 - Data変換では入力と期待出力を示し、Schema、行数、値、NULL、重複、集計粒度のどれが変わるかを追わせる。診断ではError直後の修正暗記ではなく、観測、原因切り分け、修正、再検証の順を問う。
 - Stemと補足条件にService正式名または正規aliasが現れる場合、表記そのものを包括的Service Entryの固定Anchorへ直接Linkする。関連Service一覧、Services Landing、外部DocumentationだけへのLinkで代用しない。
@@ -82,6 +84,8 @@
 
 「要件を満たさない」「リスクが増える」だけの定型文を誤答解説にしない。何の要件に反し、どの挙動や制約が原因かを選択肢ごとに書く。同一文の使い回し、変数だけを置換した説明、正答文の言い換えを検出する。
 
+Artifact問題では、全Optionについて候補内の決定的なExact slice、共通検証で得た候補別結果のExact slice、その両方を含む正答または誤答解説のExact sliceを `artifact_selection.explanation_bindings` で結ぶ。正答解説は正答候補のField／Call／値／Edgeと通過結果を、誤答解説は各候補固有のMutationと失敗結果を説明する。候補だけを変更して旧Text問題の解説を残す、候補に存在しないService／Architecture判断を説明する、全候補へ同じ理由を付ける状態を許可しない。Artifactまたは候補別結果を変更したら、Binding、解説、問題Hash、意味Review、独立Reviewを同じ変更単位で更新する。
+
 ## 5. 生成元を設計する
 
 大量問題では、Markdownへ直接複製するより、構造化された正規データと生成処理を使う。既存方式がある場合はそれを尊重する。
@@ -103,6 +107,8 @@
 - 生成済み表示から読んだ正答を照合する場合のRendered Answer
 - 正答判断に必要な実務Artifactの分類。概念問題も空Listとして明示する `artifact_types`
 - 60%へ算入する問題の全Option Exact slice、候補固有Binding、要求、Decision axis、候補検証Reference、候補別結果、検証済み正答集合を保持する `artifact_evidence` と `artifact_selection`
+- 60%へ算入する問題のArtifact固有Prompt／Scenario／Deletion testを保持する `artifact_selection.stem_contract` と、全候補の決定差分／検証結果／正誤解説を結ぶ `artifact_selection.explanation_bindings`
+- Text問題から変換した場合の旧本文はBaseline hashまたは監査用の非表示Sourceとしてだけ保持し、learner-visible Stem／解説へ連結しない
 - Stem、全Option、正答・誤答解説へ出力するService表記と、正式名称・略称をEntryへ解決する正規alias情報
 
 関連講義へのLinkと、正答の根拠となる一次情報Sourceを別Fieldで保持する。生成時に、欠落、選択肢と解説の対応ずれ、Source不足、Rendered Answerとの不一致、正答位置、重複ID、短すぎる解説、同一解説を検出する。共通の書き出し形式、既定閾値、レビュー記録は [question-bank-validation-procedure.md](question-bank-validation-procedure.md) に従う。
@@ -143,6 +149,7 @@
 - 同じシナリオ、固有名詞、数値、文型の反復
 - 正答位置や製品機能への偏り
 - 通常問題と模擬試験の重複
+- Text問題のStem・正誤解説を候補Artifactだけ差し替えて流用した変換問題と、正規化Scenario contractの再利用
 - 講義で説明していない知識への依存
 - 領域別のArtifact密度と、説明文だけの問題へ偏っていないか
 - 通常問題集だけがArtifact豊富でPractice／Mock formが0件または60%未満になっていないか
@@ -163,6 +170,7 @@ BlockerとMajorは必ず0件にする。Minorは原則修正し、残す場合�
 - [ ] 公式試験目標の空白がない
 - [ ] 現行公式ガイドと公式Sample／Practiceの調査状態、確認日、Access制約が記録されている
 - [ ] 全問に `assessment_surface`、`artifact_types`、`artifact_evidence` があり、60%へ算入する問は全OptionのExact slice、候補固有Binding、有効な `artifact_selection`、共通検証済み正答集合を持つ。これらに合格したArtifact-native候補選択問題が通常問題集と各Practice／Mock formのそれぞれで60%以上で、Stem-only／架空Wrapperを含めず、種類別最低数が公式Evidenceに基づいて一致する
+- [ ] 算入する全問にArtifact固有の `stem_contract` と全Optionの `explanation_bindings` があり、候補Artifact、候補別結果、正誤解説がExact sliceで一致する。旧Text問題のStem／解説、候補変更後のStale explanation、再利用Scenario contractが0件である
 - [ ] 全問の構造検査が通る
 - [ ] 公式試験の問題形式と形式別件数が一致する
 - [ ] 公式Source、確認日、Rendered Answerの照合が通る
