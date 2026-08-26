@@ -70,7 +70,6 @@ ARTIFACT_TYPES = {
     "logs_metrics",
     "diagram_ui",
 }
-MIN_ARTIFACT_QUESTION_RATIO = 0.60
 MAX_ARTIFACT_SOURCE_LINE_LENGTH = 100
 ARTIFACT_SELECTION_TASK = "select_correct_artifact"
 ARTIFACT_VALIDATION_METHODS = {
@@ -230,11 +229,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--require-metadata-targets", action="store_true", help="require allowed/count targets for question type, difficulty, and cognitive type")
     parser.add_argument("--require-course-count-policy", action="store_true", help="require question-set metadata and validate practice-bank level/count policy")
     parser.add_argument(
+        "--require-question-source-profile",
+        action="store_true",
+        help=(
+            "require a pre-authoring source profile with question-format and decision-pattern distributions, "
+            "official and observed scope analysis, and independent stem/option artifact counts and rates"
+        ),
+    )
+    parser.add_argument(
         "--require-artifact-policy",
         action="store_true",
         help=(
-            "require official evidence and at least 60%% native, readable option-artifact questions "
-            "with artifact-specific stem and explanation bindings on every assessment surface"
+            "require official evidence and source-profile minimums for native, readable "
+            "option-artifact questions with artifact-specific stem and explanation bindings on "
+            "every assessment surface; enforce artifact_target_ratio only when explicitly declared"
         ),
     )
     parser.add_argument("--review-ledger", type=Path, help="semantic CSV with id,status,reviewer,notes[,question_hash]")
@@ -1502,7 +1510,7 @@ def validate_question_artifact_evidence(
                 Finding(
                     "ERROR",
                     "artifact-evidence-location-not-option",
-                    f"{label}.location must point to an option; stem-only artifacts do not count toward the 60% policy",
+                    f"{label}.location must point to an option; stem-only artifacts do not count toward the Artifact ratio policy",
                 )
             )
             continue
@@ -1594,7 +1602,7 @@ def validate_question_artifact_evidence(
             Finding(
                 "ERROR",
                 "artifact-selection-question-type",
-                f"{question_id}: the 60% option-artifact policy only counts single_choice or multiple_response questions",
+                f"{question_id}: the option-artifact ratio policy only counts single_choice or multiple_response questions",
             )
         )
 
@@ -1977,6 +1985,7 @@ def _validate_artifact_surface_policy(
     policy: dict[str, Any],
     questions: list[dict[str, Any]],
     validated_types: list[set[str]],
+    target_ratio: float | None,
     findings: list[Finding],
 ) -> None:
     raw_surfaces = policy.get("assessment_surfaces")
@@ -2038,7 +2047,7 @@ def _validate_artifact_surface_policy(
                     f"{surface}: declared total {total}, found {len(indexes)} questions",
                 )
             )
-        floor = math.ceil(total * MIN_ARTIFACT_QUESTION_RATIO)
+        floor = math.ceil(total * target_ratio) if target_ratio is not None else 0
         if isinstance(minimum, bool) or not isinstance(minimum, int) or not 0 <= minimum <= total:
             findings.append(
                 Finding(
@@ -2050,12 +2059,12 @@ def _validate_artifact_surface_policy(
             effective_minimum = floor
         else:
             effective_minimum = max(floor, minimum)
-            if minimum < floor:
+            if target_ratio is not None and minimum < floor:
                 findings.append(
                     Finding(
                         "ERROR",
                         "artifact-surface-minimum-below-floor",
-                        f"{surface}: minimum must be at least {floor} ({MIN_ARTIFACT_QUESTION_RATIO:.0%} of {total}), found {minimum}",
+                        f"{surface}: minimum must be at least {floor} ({target_ratio:.0%} of {total}), found {minimum}",
                     )
                 )
         artifact_count = sum(1 for index in indexes if validated_types[index])
@@ -2105,6 +2114,569 @@ def _validate_artifact_surface_policy(
                 )
 
 
+def validate_question_source_profile(
+    targets: dict[str, Any] | None,
+    required: bool,
+    findings: list[Finding],
+) -> None:
+    if targets is None:
+        if required:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "question-source-profile-targets-not-provided",
+                    "--require-question-source-profile requires --targets",
+                )
+            )
+        return
+
+    profile = targets.get("question_source_profile")
+    if profile is None:
+        if required:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "missing-question-source-profile",
+                    "targets.question_source_profile is required",
+                )
+            )
+        return
+    if not isinstance(profile, dict):
+        findings.append(
+            Finding(
+                "ERROR",
+                "invalid-question-source-profile",
+                "targets.question_source_profile must be an object",
+            )
+        )
+        return
+
+    if profile.get("analyzed_before_authoring") is not True:
+        findings.append(
+            Finding(
+                "ERROR",
+                "question-source-profile-not-pre-authoring",
+                "question_source_profile.analyzed_before_authoring must be true",
+            )
+        )
+
+    sample_size = profile.get("sample_size")
+    if isinstance(sample_size, bool) or not isinstance(sample_size, int) or sample_size < 0:
+        findings.append(
+            Finding(
+                "ERROR",
+                "invalid-question-source-sample-size",
+                "question_source_profile.sample_size must be a non-negative integer",
+            )
+        )
+        return
+
+    def validate_primary_distribution(raw_value: Any, field: str) -> dict[str, int]:
+        label = f"question_source_profile.{field}"
+        if not isinstance(raw_value, dict) or (sample_size > 0 and not raw_value):
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "invalid-question-source-distribution",
+                    f"{label} must be a non-empty object when sample_size is positive",
+                )
+            )
+            return {}
+        validated: dict[str, int] = {}
+        for raw_key, raw_count in raw_value.items():
+            key = str(raw_key).strip()
+            if not key or isinstance(raw_count, bool) or not isinstance(raw_count, int) or raw_count < 0:
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "invalid-question-source-distribution",
+                        f"{label} must contain non-empty labels with non-negative integer counts",
+                    )
+                )
+                continue
+            validated[key] = raw_count
+        if sum(validated.values()) != sample_size:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "question-source-distribution-total-mismatch",
+                    f"{label} must total sample_size {sample_size}, found {sum(validated.values())}",
+                )
+            )
+        return validated
+
+    validate_primary_distribution(
+        profile.get("observed_question_type_counts"),
+        "observed_question_type_counts",
+    )
+    validate_primary_distribution(
+        profile.get("observed_primary_decision_pattern_counts"),
+        "observed_primary_decision_pattern_counts",
+    )
+
+    scope_analysis = profile.get("scope_analysis")
+    if not isinstance(scope_analysis, dict):
+        findings.append(
+            Finding(
+                "ERROR",
+                "invalid-question-source-scope-analysis",
+                "question_source_profile.scope_analysis must be an object",
+            )
+        )
+    else:
+        weight_status = scope_analysis.get("official_weight_status")
+        raw_weights = scope_analysis.get("official_domain_weights")
+        if weight_status not in {"published", "not_published"} or not isinstance(raw_weights, dict):
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "invalid-question-source-official-scope",
+                    "scope_analysis must declare official_weight_status and official_domain_weights",
+                )
+            )
+        elif weight_status == "published":
+            valid_weights = [
+                float(value)
+                for key, value in raw_weights.items()
+                if str(key).strip()
+                and not isinstance(value, bool)
+                and isinstance(value, (int, float))
+                and 0 < float(value) <= 1
+            ]
+            if len(valid_weights) != len(raw_weights) or not valid_weights or not math.isclose(
+                sum(valid_weights), 1.0, rel_tol=0.0, abs_tol=0.0005
+            ):
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "invalid-question-source-official-weights",
+                        "published official_domain_weights must contain positive values totaling 1",
+                    )
+                )
+        elif raw_weights:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "invalid-question-source-official-weights",
+                    "official_domain_weights must be empty when official_weight_status is not_published",
+                )
+            )
+
+        raw_objectives = scope_analysis.get("official_objectives")
+        official_objectives: set[str] = set()
+        if not isinstance(raw_objectives, list) or not raw_objectives:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "invalid-question-source-official-scope",
+                    "scope_analysis.official_objectives must be a non-empty list",
+                )
+            )
+        else:
+            objective_values = [str(value).strip() for value in raw_objectives]
+            official_objectives = {value for value in objective_values if value}
+            if len(official_objectives) != len(objective_values):
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "invalid-question-source-official-scope",
+                        "scope_analysis.official_objectives must contain unique non-empty values",
+                    )
+                )
+
+        objective_counts = validate_primary_distribution(
+            scope_analysis.get("observed_primary_objective_counts"),
+            "scope_analysis.observed_primary_objective_counts",
+        )
+        unexpected_objectives = sorted(set(objective_counts) - official_objectives - {"unmapped"})
+        if unexpected_objectives:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "question-source-objective-outside-official-scope",
+                    f"observed objectives are absent from official_objectives: {unexpected_objectives}",
+                )
+            )
+
+        validate_primary_distribution(
+            scope_analysis.get("observed_primary_content_family_counts"),
+            "scope_analysis.observed_primary_content_family_counts",
+        )
+
+        for field in (
+            "observed_service_feature_counts",
+            "observed_integration_pattern_counts",
+            "observed_lifecycle_stage_counts",
+            "observed_constraint_counts",
+        ):
+            raw_inventory = scope_analysis.get(field)
+            label = f"question_source_profile.scope_analysis.{field}"
+            if not isinstance(raw_inventory, dict):
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "invalid-question-source-scope-inventory",
+                        f"{label} must be an object",
+                    )
+                )
+                continue
+            if field == "observed_service_feature_counts" and sample_size > 0 and not raw_inventory:
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "invalid-question-source-scope-inventory",
+                        f"{label} must be non-empty when sample_size is positive",
+                    )
+                )
+            for raw_key, raw_count in raw_inventory.items():
+                if (
+                    not str(raw_key).strip()
+                    or isinstance(raw_count, bool)
+                    or not isinstance(raw_count, int)
+                    or not 0 <= raw_count <= sample_size
+                ):
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "invalid-question-source-scope-inventory",
+                            f"{label} must contain non-empty labels with counts between 0 and sample_size",
+                        )
+                    )
+
+        scope_gaps = scope_analysis.get("scope_gaps")
+        if not isinstance(scope_gaps, list) or any(not isinstance(item, str) or not item.strip() for item in scope_gaps):
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "invalid-question-source-scope-gaps",
+                    "scope_analysis.scope_gaps must be a list of non-empty strings",
+                )
+            )
+
+        authoring_decisions = scope_analysis.get("authoring_scope_decisions")
+        if (
+            not isinstance(authoring_decisions, list)
+            or not authoring_decisions
+            or any(not isinstance(item, str) or not item.strip() for item in authoring_decisions)
+        ):
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "invalid-question-source-authoring-decisions",
+                    "scope_analysis.authoring_scope_decisions must be a non-empty list of decisions",
+                )
+            )
+
+        raw_patterns = scope_analysis.get("scope_selection_patterns")
+        pattern_ids: set[str] = set()
+        if not isinstance(raw_patterns, list) or (sample_size > 0 and not raw_patterns):
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "invalid-question-source-selection-patterns",
+                    "scope_analysis.scope_selection_patterns must be a non-empty list when source questions exist",
+                )
+            )
+        else:
+            for index, raw_pattern in enumerate(raw_patterns, start=1):
+                label = f"question_source_profile.scope_analysis.scope_selection_patterns[{index}]"
+                if not isinstance(raw_pattern, dict):
+                    findings.append(
+                        Finding("ERROR", "invalid-question-source-selection-patterns", f"{label} must be an object")
+                    )
+                    continue
+                pattern_id = str(raw_pattern.get("id", "")).strip()
+                description = raw_pattern.get("description")
+                transformation = raw_pattern.get("question_transformation")
+                observed_count = raw_pattern.get("observed_count")
+                if not pattern_id or pattern_id in pattern_ids:
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "invalid-question-source-selection-patterns",
+                            f"{label}.id must be unique and non-empty",
+                        )
+                    )
+                else:
+                    pattern_ids.add(pattern_id)
+                if not isinstance(description, str) or not description.strip():
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "invalid-question-source-selection-patterns",
+                            f"{label}.description must be non-empty",
+                        )
+                    )
+                if not isinstance(transformation, str) or not transformation.strip():
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "invalid-question-source-selection-patterns",
+                            f"{label}.question_transformation must explain how primary information becomes a question",
+                        )
+                    )
+                if (
+                    isinstance(observed_count, bool)
+                    or not isinstance(observed_count, int)
+                    or not 1 <= observed_count <= sample_size
+                ):
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "invalid-question-source-selection-patterns",
+                            f"{label}.observed_count must be between 1 and sample_size",
+                        )
+                    )
+
+        raw_extrapolations = scope_analysis.get("official_scope_extrapolations")
+        adopted_objectives: set[str] = set()
+        if not isinstance(raw_extrapolations, list) or (pattern_ids and not raw_extrapolations):
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "invalid-question-source-scope-extrapolations",
+                    "scope_analysis.official_scope_extrapolations must be non-empty when selection patterns exist",
+                )
+            )
+        else:
+            for index, raw_item in enumerate(raw_extrapolations, start=1):
+                label = f"question_source_profile.scope_analysis.official_scope_extrapolations[{index}]"
+                if not isinstance(raw_item, dict):
+                    findings.append(
+                        Finding("ERROR", "invalid-question-source-scope-extrapolations", f"{label} must be an object")
+                    )
+                    continue
+                objective = str(raw_item.get("objective", "")).strip()
+                status = raw_item.get("authoring_status")
+                confidence = raw_item.get("confidence")
+                reasoning = raw_item.get("reasoning")
+                if objective not in official_objectives:
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "question-source-extrapolation-outside-official-scope",
+                            f"{label}.objective must be present in official_objectives",
+                        )
+                    )
+                if status not in {"adopted", "rejected", "deferred"}:
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "invalid-question-source-scope-extrapolations",
+                            f"{label}.authoring_status must be adopted, rejected, or deferred",
+                        )
+                    )
+                elif status == "adopted" and objective:
+                    adopted_objectives.add(objective)
+                if confidence not in {"low", "medium", "high"}:
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "invalid-question-source-scope-extrapolations",
+                            f"{label}.confidence must be low, medium, or high",
+                        )
+                    )
+                if not isinstance(reasoning, str) or not reasoning.strip():
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "invalid-question-source-scope-extrapolations",
+                            f"{label}.reasoning must be non-empty",
+                        )
+                    )
+                for field in ("primary_source_topics", "inferred_question_patterns", "basis_pattern_ids"):
+                    raw_values = raw_item.get(field)
+                    if (
+                        not isinstance(raw_values, list)
+                        or not raw_values
+                        or any(not isinstance(value, str) or not value.strip() for value in raw_values)
+                    ):
+                        findings.append(
+                            Finding(
+                                "ERROR",
+                                "invalid-question-source-scope-extrapolations",
+                                f"{label}.{field} must be a non-empty list of strings",
+                            )
+                        )
+                    elif field == "basis_pattern_ids":
+                        unknown_patterns = sorted(set(raw_values) - pattern_ids)
+                        if unknown_patterns:
+                            findings.append(
+                                Finding(
+                                    "ERROR",
+                                    "question-source-extrapolation-unknown-pattern",
+                                    f"{label}.basis_pattern_ids contains unknown ids: {unknown_patterns}",
+                                )
+                            )
+                raw_urls = raw_item.get("primary_source_urls")
+                if (
+                    not isinstance(raw_urls, list)
+                    or not raw_urls
+                    or any(
+                        not isinstance(url, str)
+                        or urlparse(url).scheme != "https"
+                        or not urlparse(url).hostname
+                        for url in raw_urls
+                    )
+                ):
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "invalid-question-source-extrapolation-sources",
+                            f"{label}.primary_source_urls must contain at least one HTTPS primary-source URL",
+                        )
+                    )
+
+        unobserved_objectives = {
+            objective
+            for objective in official_objectives
+            if objective_counts.get(objective, 0) == 0
+        }
+        missing_adopted_extrapolations = sorted(unobserved_objectives - adopted_objectives)
+        if pattern_ids and missing_adopted_extrapolations:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "question-source-unobserved-objective-not-extrapolated",
+                    "every official objective absent from the source must have an adopted, primary-source-based "
+                    f"extrapolation: {missing_adopted_extrapolations}",
+                )
+            )
+
+    count_keys = (
+        "stem_artifact_questions",
+        "option_artifact_questions",
+        "both_stem_and_option_artifact_questions",
+        "neither_artifact_questions",
+    )
+    raw_counts = profile.get("artifact_location_counts")
+    counts: dict[str, int] = {}
+    if not isinstance(raw_counts, dict):
+        findings.append(
+            Finding(
+                "ERROR",
+                "invalid-question-source-artifact-counts",
+                "question_source_profile.artifact_location_counts must be an object",
+            )
+        )
+    else:
+        for key in count_keys:
+            value = raw_counts.get(key)
+            if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= sample_size:
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "invalid-question-source-artifact-counts",
+                        f"question_source_profile.artifact_location_counts.{key} must be between 0 and sample_size",
+                    )
+                )
+            else:
+                counts[key] = value
+
+    if len(counts) == len(count_keys):
+        stem_count = counts["stem_artifact_questions"]
+        option_count = counts["option_artifact_questions"]
+        both_count = counts["both_stem_and_option_artifact_questions"]
+        neither_count = counts["neither_artifact_questions"]
+        expected_neither = sample_size - stem_count - option_count + both_count
+        if both_count > stem_count or both_count > option_count or expected_neither != neither_count:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "question-source-artifact-overlap-mismatch",
+                    "source artifact counts must satisfy both <= stem and option, and "
+                    "neither = sample_size - stem - option + both",
+                )
+            )
+
+    rate_to_count = {
+        "stem_artifact_rate": "stem_artifact_questions",
+        "option_artifact_rate": "option_artifact_questions",
+        "both_stem_and_option_artifact_rate": "both_stem_and_option_artifact_questions",
+        "neither_artifact_rate": "neither_artifact_questions",
+    }
+    raw_rates = profile.get("artifact_location_rates")
+    if not isinstance(raw_rates, dict):
+        findings.append(
+            Finding(
+                "ERROR",
+                "invalid-question-source-artifact-rates",
+                "question_source_profile.artifact_location_rates must be an object",
+            )
+        )
+    else:
+        for rate_key, count_key in rate_to_count.items():
+            value = raw_rates.get(rate_key)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= float(value) <= 1:
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "invalid-question-source-artifact-rates",
+                        f"question_source_profile.artifact_location_rates.{rate_key} must be between 0 and 1",
+                    )
+                )
+                continue
+            if count_key in counts:
+                expected_rate = counts[count_key] / sample_size if sample_size else 0.0
+                if not math.isclose(float(value), expected_rate, rel_tol=0.0, abs_tol=0.000005):
+                    findings.append(
+                        Finding(
+                            "ERROR",
+                            "question-source-artifact-rate-mismatch",
+                            f"{rate_key}: expected {expected_rate:.6f} from counts, found {float(value):.6f}",
+                        )
+                    )
+
+    for field, count_key in (
+        ("stem_artifact_by_type", "stem_artifact_questions"),
+        ("option_artifact_by_type", "option_artifact_questions"),
+    ):
+        raw_by_type = profile.get(field)
+        if not isinstance(raw_by_type, dict):
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "invalid-question-source-artifact-types",
+                    f"question_source_profile.{field} must be an object",
+                )
+            )
+            continue
+        location_total = counts.get(count_key, sample_size)
+        for raw_type, raw_count in raw_by_type.items():
+            artifact_type = str(raw_type)
+            if artifact_type not in ARTIFACT_TYPES:
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "unsupported-question-source-artifact-type",
+                        f"question_source_profile.{field} contains unsupported type {artifact_type!r}",
+                    )
+                )
+            if isinstance(raw_count, bool) or not isinstance(raw_count, int) or not 0 <= raw_count <= location_total:
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "invalid-question-source-artifact-types",
+                        f"question_source_profile.{field}[{artifact_type!r}] must be between 0 and its location total",
+                    )
+                )
+
+    classification_rule = profile.get("classification_rule")
+    if (
+        not isinstance(classification_rule, dict)
+        or classification_rule.get("mention_only_is_artifact") is not False
+        or classification_rule.get("requires_learner_visible_material_and_decision_dependency") is not True
+    ):
+        findings.append(
+            Finding(
+                "ERROR",
+                "invalid-question-source-classification-rule",
+                "question_source_profile.classification_rule must reject mention-only prose and require "
+                "learner-visible material plus decision dependency",
+            )
+        )
+
+
 def validate_artifact_policy(
     targets: dict[str, Any] | None,
     questions: list[dict[str, Any]],
@@ -2125,6 +2697,24 @@ def validate_artifact_policy(
     if not isinstance(policy, dict):
         findings.append(Finding("ERROR", "invalid-artifact-policy", "targets.artifact_policy must be an object"))
         return
+
+    raw_target_ratio = policy.get("artifact_target_ratio")
+    target_ratio: float | None = None
+    if raw_target_ratio is not None:
+        if (
+            isinstance(raw_target_ratio, bool)
+            or not isinstance(raw_target_ratio, (int, float))
+            or not 0 <= float(raw_target_ratio) <= 1
+        ):
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "invalid-artifact-target-ratio",
+                    "artifact_policy.artifact_target_ratio must be between 0 and 1 when declared",
+                )
+            )
+        else:
+            target_ratio = float(raw_target_ratio)
 
     allowed_hosts = {host.strip().casefold().rstrip(".") for host in official_source_hosts if host.strip()}
     if required and not allowed_hosts:
@@ -2225,7 +2815,7 @@ def validate_artifact_policy(
         findings.append(Finding("ERROR", "missing-artifact-calibration-note", "targets.artifact_policy.calibration_note is required"))
 
     minimum_any = policy.get("minimum_questions_with_artifacts")
-    global_floor = math.ceil(len(questions) * MIN_ARTIFACT_QUESTION_RATIO)
+    global_floor = math.ceil(len(questions) * target_ratio) if target_ratio is not None else 0
     if isinstance(minimum_any, bool) or not isinstance(minimum_any, int) or not 0 <= minimum_any <= len(questions):
         findings.append(
             Finding(
@@ -2235,20 +2825,28 @@ def validate_artifact_policy(
             )
         )
         minimum_any = None
-    elif minimum_any < global_floor:
+    elif target_ratio is not None and minimum_any < global_floor:
         findings.append(
             Finding(
                 "ERROR",
                 "artifact-minimum-below-global-floor",
                 f"artifact_policy.minimum_questions_with_artifacts must be at least {global_floor} "
-                f"({MIN_ARTIFACT_QUESTION_RATIO:.0%} of {len(questions)} questions), found {minimum_any}",
+                f"({target_ratio:.0%} of {len(questions)} questions), found {minimum_any}",
             )
         )
 
     minimum_by_type = policy.get("minimum_by_type")
     validated_minimums: dict[str, int] = {}
-    if not isinstance(minimum_by_type, dict) or not minimum_by_type:
-        findings.append(Finding("ERROR", "invalid-artifact-minimums", "artifact_policy.minimum_by_type must be a non-empty object"))
+    if not isinstance(minimum_by_type, dict):
+        findings.append(Finding("ERROR", "invalid-artifact-minimums", "artifact_policy.minimum_by_type must be an object"))
+    elif not minimum_by_type and max(global_floor, minimum_any or 0) > 0:
+        findings.append(
+            Finding(
+                "ERROR",
+                "invalid-artifact-minimums",
+                "artifact_policy.minimum_by_type must be non-empty when the option-artifact minimum is greater than zero",
+            )
+        )
     else:
         for raw_type, count in minimum_by_type.items():
             artifact_type = str(raw_type)
@@ -2302,12 +2900,13 @@ def validate_artifact_policy(
 
     effective_minimum = max(global_floor, minimum_any or 0)
     if questions_with_artifacts < effective_minimum:
+        floor_note = f" ({target_ratio:.0%} global floor)" if target_ratio is not None else ""
         findings.append(
             Finding(
                 "ERROR",
                 "artifact-question-count-below-minimum",
-                f"option-artifact selection questions: minimum {effective_minimum} "
-                f"({MIN_ARTIFACT_QUESTION_RATIO:.0%} global floor), found {questions_with_artifacts}",
+                f"option-artifact selection questions: minimum {effective_minimum}"
+                f"{floor_note}, found {questions_with_artifacts}",
             )
         )
     for artifact_type, expected_count in validated_minimums.items():
@@ -2320,7 +2919,9 @@ def validate_artifact_policy(
                     f"{artifact_type}: minimum {expected_count}, found {actual_count}",
                 )
             )
-    _validate_artifact_surface_policy(policy, questions, validated_types, findings)
+    _validate_artifact_surface_policy(
+        policy, questions, validated_types, target_ratio, findings
+    )
 
 
 def validate_sources(questions: list[dict[str, Any]], args: argparse.Namespace, findings: list[Finding]) -> None:
@@ -2702,6 +3303,11 @@ def main() -> int:
         args.require_metadata_targets,
         args.require_course_count_policy,
         args.official_source_host,
+        findings,
+    )
+    validate_question_source_profile(
+        targets,
+        args.require_question_source_profile,
         findings,
     )
     validate_artifact_policy(

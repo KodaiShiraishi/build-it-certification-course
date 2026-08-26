@@ -15,7 +15,36 @@
 
 包括的とは、製品の全機能を百科事典のように列挙することではない。対象資格の問題を解くために必要な概念、Service、操作、連携、Artifact読解、障害診断、比較、設計判断を、明示した入口から切れ目なく学べることである。
 
-## 2. カバレッジを四つの単位で持つ
+## 2. 問題集の全面再作成では問題から講義を作り直す
+
+ユーザーが既存問題の改修や増問ではなく、問題集の「作り直し」「全面再作成」「旧問題を流用しない再制作」を求めた場合は、講義も同じFresh-corpus境界で作り直す。これは新規講座の一般的な制作順ではなく、**全面再作成した問題を講座の到達点として先に固定し、その要求から既存講座の講義を逆設計するための順序契約**である。
+
+必須順序は次のとおりとする。
+
+1. 公式試験範囲、一次情報、問題Source分析からAuthoring planを確定する。
+2. 旧問題と旧講義を生成Seedにせず、新しい正規問題Corpusを作成し、構造・意味・独立Reviewを完了してHashを固定する。
+3. 全問題のStem、全候補、正答・誤答解説、Artifact契約から、Foundation、Service、Artifact、IntegrationのRequirementを抽出した正規 `assessment_requirement_inventory` を生成する。
+4. Requirement集合を学習上の前提関係でClusterし、必要な講義数、章分割、導入順、Path、Service curriculum、Artifact grammar、Integration flowを決める。旧講義数や既存章立てを先に目標値へしない。
+5. 新しいLecture IDまたは明示的な全面置換Manifestの下で講義本文を作り直す。問題で正答を決めるMechanism、Failure、Evidence、Decision boundaryを、問題より前に学べる本文として教える。
+6. 新講義から学習契約Manifestを生成し、全Assessment requirementの100%閉包、講義の意味Review、生成再現性、learner-visible Markdown／HTMLを検証する。
+
+旧講義のID、Path、本文、講義数はBaseline、非再利用監査、Link移行のためだけに参照できる。安定URLを保つためPathを再利用してもよいが、旧本文をSeed、Template、要約元、内容上限、または新問題の制約へ使わない。新問題を既存講義へ割り当てる、旧講義へ短い追記をする、Foundation／Service／Integrationの汎用補助ページだけを追加する、といった処理は講義全面再作成ではない。Domain／Task講義を含む再作成対象Corpusの本文そのものを、新問題Requirementから再設計する。
+
+問題Sourceは公式Objective、判断要求、必要知識を保持してよいが、講義再設計前の旧Lecture Pathを内容上の制約として保持しない。関連講義Linkは、新講義Inventoryが確定した後にRequirementから割り当てる。講義制作中に問題の正答性、曖昧さ、範囲逸脱等を発見して問題を修正した場合は、問題Corpus HashとRequirement Inventoryを更新し、影響する講義を再生成・再Reviewする。講義へ収めるためだけに問題のScenario、選択肢、正答を変えない。
+
+`lecture_rebuild_manifest` または同等の機械可読な証拠へ、最低限次を保持する。
+
+- 確定した正規問題ID集合と `question_corpus_hash`
+- 問題全件から生成した `assessment_requirement_inventory_hash`
+- 旧講義Inventory、旧本文集合のBaseline Hash、再作成対象Path
+- `old_lecture_seed_used=false` と、講義Generatorが読み込む正規Source一覧
+- 新講義Inventory、各講義のID／Path／導入順／本文Hash
+- 各Requirementから講義EvidenceへのTraceと、どの問題IDが各講義を必要としたか
+- 問題修正後に下流のRequirement、講義、Reviewを無効化して再実行する規則
+
+完了Gateでは、Manifestの自己申告だけでなく、講義Generatorが旧講義本文を入力にしていないこと、再作成対象の各本文が新Hashになっていること、旧講義の完全な段落が正式名称・一次情報の短い引用・Code・URL等の正当な共通部分を除いて残っていないことを検査する。さらに、講義数と章立てがRequirement clusteringの結果であり、着手前の講義数へ合わせた数合わせではないことを意味Reviewする。
+
+## 3. カバレッジを四つの単位で持つ
 
 試験領域だけでなく、問題が要求する知識を次の単位へ分解する。
 
@@ -26,7 +55,7 @@
 
 問題ごとに必要なUnitを列挙し、各Unitが問題より前に講義されていることを確認する。問題は新しいScenarioを提示してよいが、正答に必要な新しい基礎知識を初出させてはいけない。
 
-## 3. Unit別の必須説明Dimension
+## 4. Unit別の必須説明Dimension
 
 ### Foundation
 
@@ -115,7 +144,7 @@
 
 Architecture Diagramだけで完了にせず、Data planeとControl plane、同期と非同期、正常時と異常時を必要に応じて分けて説明する。
 
-## 4. 問題前提閉包Manifest
+## 5. 問題前提閉包Manifest
 
 新規講座、講義または問題集の大幅更新、全面品質改修では、正規Sourceから機械可読な学習契約Manifestを生成する。手作業の事後申告だけをSource of truthにしない。
 
@@ -234,7 +263,7 @@ Manifestの形は次のようにする。これはSchemaの抜粋であり、実
 
 問題ID集合は正規問題Sourceから書き出したJSONLと完全一致させる。Manifestに存在する問題だけを検査して、未登録問題を見逃すことを許可しない。
 
-## 5. 必須Gate
+## 6. 必須Gate
 
 同梱の `scripts/validate_learning_contract.py` または同等以上のプロジェクト固有Validatorで、少なくとも次をBlockerとして検出する。
 
@@ -275,9 +304,9 @@ python scripts/validate_learning_contract.py \
 - Assessmentが対応する包括的Service curriculum unitへBindingされていない
 - 正規講義Inventoryを使用する場合にManifestのLecture IDまたはPathが一致しない
 
-合格率は100%とする。60% Artifact問題ポリシーは「全選択肢のArtifact候補から正しい候補を選ばせる問題の割合」であり、StemへArtifactを置く割合でも、講義側の前提閉包を60%でよいとする規則でもない。問題で実際に要求するService、Artifact、Integrationはすべて先に教える。
+合格率は100%とする。`artifact_target_ratio` は「全選択肢のArtifact候補から正しい候補を選ばせる問題の割合」であり、StemへArtifactを置く割合でも、講義側の前提閉包を同じ比率でよいとする規則でもない。問題で実際に要求するService、Artifact、Integrationはすべて先に教える。
 
-## 6. Negative fixtureと意味Review
+## 7. Negative fixtureと意味Review
 
 次を代表的な失敗Fixtureとして保持する。
 
@@ -299,10 +328,15 @@ python scripts/validate_learning_contract.py \
 - 二つのEntryへ同じaliasを割り当てる、`Amazon EKS`内の`EKS`だけを処理する、またはCode fence内のaliasを未Linkとして誤検出する
 - 包括的Service講義はあるが、AssessmentからBindingされていない
 - 通常講義の末尾へ同じ `Services in this lecture` 一覧・定型プロフィールをGeneratorが全ページへ複製している
+- 問題集を全面再作成したのに、旧講義数と旧Pathを先に固定し、新問題をそこへ割り当てただけである
+- 旧Domain／Task講義本文を残したまま、汎用Foundation／Service／Integrationページの追加だけを講義再作成と申告する
+- `lecture_rebuild_manifest` の問題Corpus HashまたはRequirement Inventory Hashが現行問題と一致しない
+- 講義Generatorが旧講義本文をSeedまたはTemplateとして読み込む、あるいは旧講義の完全な段落が正当な共通部分を除いて残る
+- 講義制作後に問題を修正したが、Requirement Inventory、影響講義、Review Hashを更新していない
 
 機械Gateは、宣言された関係とExact Evidenceの存在を検査する。説明が技術的に正しく、Dimensionを本当に教えているか、問題のRequirement列挙が完全かは意味Reviewで確認する。独立ReviewにはManifestだけでなく、正規問題、Learner-visible講義、Artifact実物を渡す。
 
-## 7. 完了条件
+## 8. 完了条件
 
 次をすべて満たすまで「包括的」「問題を解ける講義」「完成」と宣言しない。
 
@@ -315,3 +349,5 @@ python scripts/validate_learning_contract.py \
 - 全Service Entry aliasが一意で正規Inventoryと一致し、全講義・Assessment Proseの各出現が対応Entryの固定Anchorへ直接Linkされ、裸・曖昧・誤Linkが0件である
 - Negative fixtureが意図どおり失敗する
 - 意味Reviewで前提漏れ、説明の飛躍、名だけのService解説、飾りのArtifactが残っていない
+- 問題集全面再作成では、確定した問題CorpusからRequirement Inventoryを生成した後に講義Inventoryと本文を作り直し、旧講義への割当てや追記だけで代用していない
+- `lecture_rebuild_manifest` が現行問題・Requirement・講義Hashと一致し、旧講義本文をSeedにしていないことと、問題修正時の下流再生成を証明する

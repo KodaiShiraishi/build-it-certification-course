@@ -19,6 +19,7 @@ from validate_question_bank import (  # noqa: E402
     Finding,
     validate_artifact_policy,
     validate_question_artifact_evidence,
+    validate_question_source_profile,
 )
 
 
@@ -28,37 +29,48 @@ def validate(question: dict[str, Any]) -> tuple[set[str], set[str]]:
     return valid_types, {finding.code for finding in findings}
 
 
-def validate_policy(questions: list[dict[str, Any]], minimum: int) -> set[str]:
+def validate_source_profile(profile: dict[str, Any]) -> set[str]:
+    findings: list[Finding] = []
+    validate_question_source_profile({"question_source_profile": profile}, True, findings)
+    return {finding.code for finding in findings}
+
+
+def validate_policy(
+    questions: list[dict[str, Any]], minimum: int, target_ratio: float | None = None
+) -> set[str]:
     reviewed_at = date.today().isoformat()
     surface_counts = Counter(str(question.get("assessment_surface", "")) for question in questions)
-    targets = {
-        "artifact_policy": {
-            "calibration_evidence": [
-                {
-                    "kind": "exam_guide",
-                    "status": "current",
-                    "url": "https://vendor.example/exam-guide",
-                    "reviewed_at": reviewed_at,
-                },
-                {
-                    "kind": "official_sample",
-                    "status": "login_required",
-                    "reviewed_at": reviewed_at,
-                },
-            ],
-            "calibration_note": "Test fixture for artifact evidence counting.",
-            "minimum_questions_with_artifacts": minimum,
-            "minimum_by_type": {"code": 1},
-            "assessment_surfaces": {
-                surface: {
-                    "total": total,
-                    "minimum_questions_with_artifacts": math.ceil(total * 0.60),
-                }
-                for surface, total in surface_counts.items()
-                if surface
+    artifact_policy: dict[str, Any] = {
+        "calibration_evidence": [
+            {
+                "kind": "exam_guide",
+                "status": "current",
+                "url": "https://vendor.example/exam-guide",
+                "reviewed_at": reviewed_at,
             },
-        }
+            {
+                "kind": "official_sample",
+                "status": "login_required",
+                "reviewed_at": reviewed_at,
+            },
+        ],
+        "calibration_note": "Test fixture for artifact evidence counting.",
+        "minimum_questions_with_artifacts": minimum,
+        "minimum_by_type": {"code": 1} if minimum > 0 else {},
+        "assessment_surfaces": {
+            surface: {
+                "total": total,
+                "minimum_questions_with_artifacts": (
+                    math.ceil(total * target_ratio) if target_ratio is not None else minimum
+                ),
+            }
+            for surface, total in surface_counts.items()
+            if surface
+        },
     }
+    if target_ratio is not None:
+        artifact_policy["artifact_target_ratio"] = target_ratio
+    targets = {"artifact_policy": artifact_policy}
     findings: list[Finding] = []
     validate_artifact_policy(targets, questions, True, ["vendor.example"], findings)
     return {finding.code for finding in findings}
@@ -105,6 +117,163 @@ def question_variant(
 
 
 def main() -> int:
+    valid_source_profile = {
+        "analyzed_before_authoring": True,
+        "sample_size": 20,
+        "observed_question_type_counts": {
+            "single_choice": 16,
+            "multiple_response": 4,
+        },
+        "observed_primary_decision_pattern_counts": {
+            "service_or_feature_selection": 8,
+            "configuration_or_permission_change": 5,
+            "failure_diagnosis": 4,
+            "cost_performance_tradeoff": 3,
+        },
+        "scope_analysis": {
+            "official_weight_status": "published",
+            "official_domain_weights": {
+                "D1": 0.34,
+                "D2": 0.26,
+                "D3": 0.22,
+                "D4": 0.18,
+            },
+            "official_objectives": ["D1", "D2", "D3", "D4"],
+            "observed_primary_objective_counts": {
+                "D1": 7,
+                "D2": 5,
+                "D3": 4,
+                "D4": 0,
+                "unmapped": 4,
+            },
+            "observed_primary_content_family_counts": {
+                "ingestion_and_transformation": 7,
+                "data_store_management": 5,
+                "operations_and_monitoring": 4,
+                "security_and_governance": 4,
+            },
+            "observed_service_feature_counts": {
+                "object storage": 6,
+                "managed ETL": 5,
+                "stream processing": 4,
+            },
+            "observed_integration_pattern_counts": {
+                "source_to_ingestion_to_lake": 5,
+                "event_to_stream_processor": 3,
+            },
+            "observed_lifecycle_stage_counts": {
+                "ingest": 7,
+                "transform": 5,
+                "operate": 4,
+                "secure": 4,
+            },
+            "observed_constraint_counts": {
+                "least_operational_overhead": 6,
+                "cost_optimization": 4,
+                "least_privilege": 3,
+            },
+            "scope_gaps": [
+                "The small source does not cover every official objective.",
+            ],
+            "authoring_scope_decisions": [
+                "Use official domain weights for final coverage and source observations for scenario depth.",
+            ],
+            "scope_selection_patterns": [
+                {
+                    "id": "constraint_to_managed_boundary",
+                    "description": "The source turns an operational constraint into a managed-service boundary decision.",
+                    "observed_count": 6,
+                    "question_transformation": "Compare supported service behavior under the stated operational constraint.",
+                },
+                {
+                    "id": "failure_signal_to_remediation",
+                    "description": "The source maps an observable failure signal to a corrective action.",
+                    "observed_count": 4,
+                    "question_transformation": "Present a failure condition and ask for the supported remediation.",
+                },
+            ],
+            "official_scope_extrapolations": [
+                {
+                    "objective": "D4",
+                    "primary_source_topics": ["least-privilege access and data protection"],
+                    "primary_source_urls": ["https://vendor.example/security-guide"],
+                    "inferred_question_patterns": [
+                        "Select the least-privilege control that preserves the required data flow."
+                    ],
+                    "basis_pattern_ids": ["constraint_to_managed_boundary"],
+                    "confidence": "medium",
+                    "reasoning": "The official objective contains the same constraint-to-boundary decision shape.",
+                    "authoring_status": "adopted",
+                }
+            ],
+        },
+        "artifact_location_counts": {
+            "stem_artifact_questions": 4,
+            "option_artifact_questions": 6,
+            "both_stem_and_option_artifact_questions": 2,
+            "neither_artifact_questions": 12,
+        },
+        "artifact_location_rates": {
+            "stem_artifact_rate": 0.2,
+            "option_artifact_rate": 0.3,
+            "both_stem_and_option_artifact_rate": 0.1,
+            "neither_artifact_rate": 0.6,
+        },
+        "stem_artifact_by_type": {"logs_metrics": 3, "configuration": 1},
+        "option_artifact_by_type": {"configuration": 4, "command": 2},
+        "classification_rule": {
+            "mention_only_is_artifact": False,
+            "requires_learner_visible_material_and_decision_dependency": True,
+        },
+    }
+    assert not validate_source_profile(valid_source_profile)
+
+    invalid_overlap_profile = copy.deepcopy(valid_source_profile)
+    invalid_overlap_profile["artifact_location_counts"]["neither_artifact_questions"] = 13
+    profile_codes = validate_source_profile(invalid_overlap_profile)
+    assert "question-source-artifact-overlap-mismatch" in profile_codes, profile_codes
+
+    invalid_rate_profile = copy.deepcopy(valid_source_profile)
+    invalid_rate_profile["artifact_location_rates"]["stem_artifact_rate"] = 0.3
+    profile_codes = validate_source_profile(invalid_rate_profile)
+    assert "question-source-artifact-rate-mismatch" in profile_codes, profile_codes
+
+    mention_only_profile = copy.deepcopy(valid_source_profile)
+    mention_only_profile["classification_rule"]["mention_only_is_artifact"] = True
+    profile_codes = validate_source_profile(mention_only_profile)
+    assert "invalid-question-source-classification-rule" in profile_codes, profile_codes
+
+    invalid_scope_profile = copy.deepcopy(valid_source_profile)
+    invalid_scope_profile["scope_analysis"]["observed_primary_content_family_counts"][
+        "ingestion_and_transformation"
+    ] = 6
+    profile_codes = validate_source_profile(invalid_scope_profile)
+    assert "question-source-distribution-total-mismatch" in profile_codes, profile_codes
+
+    outside_scope_profile = copy.deepcopy(valid_source_profile)
+    outside_scope_profile["scope_analysis"]["observed_primary_objective_counts"] = {
+        "D1": 7,
+        "D2": 5,
+        "D3": 4,
+        "D4": 3,
+        "D5": 1,
+    }
+    profile_codes = validate_source_profile(outside_scope_profile)
+    assert "question-source-objective-outside-official-scope" in profile_codes, profile_codes
+
+    missing_extrapolation_profile = copy.deepcopy(valid_source_profile)
+    missing_extrapolation_profile["scope_analysis"]["official_scope_extrapolations"] = []
+    profile_codes = validate_source_profile(missing_extrapolation_profile)
+    assert "invalid-question-source-scope-extrapolations" in profile_codes, profile_codes
+    assert "question-source-unobserved-objective-not-extrapolated" in profile_codes, profile_codes
+
+    unknown_pattern_profile = copy.deepcopy(valid_source_profile)
+    unknown_pattern_profile["scope_analysis"]["official_scope_extrapolations"][0][
+        "basis_pattern_ids"
+    ] = ["missing-pattern"]
+    profile_codes = validate_source_profile(unknown_pattern_profile)
+    assert "question-source-extrapolation-unknown-pattern" in profile_codes, profile_codes
+
     code_a = "```python\nresponse = glue.start_job_run(JobName=job_name)\nreturn response['JobRunId']\n```"
     code_b = "```python\nresponse = glue.get_job_run(JobName=job_name, RunId=job_name)\nreturn response['JobRun']['Id']\n```"
     valid_question = {
@@ -290,8 +459,29 @@ def main() -> int:
     exact_floor_questions = [valid_question, second_artifact, third_artifact, *conceptual_questions[:2]]
     assert not validate_policy(exact_floor_questions, 3)
 
+    thirty_percent_questions = [
+        valid_question,
+        second_artifact,
+        third_artifact,
+        *[
+            conceptual_questions[0] | {"id": f"CONCEPT-THIRTY-{index:03d}"}
+            for index in range(1, 8)
+        ],
+    ]
+    assert not validate_policy(thirty_percent_questions, 3, 0.30)
+
+    source_profile_minimum_questions = [
+        valid_question,
+        *[
+            conceptual_questions[0] | {"id": f"CONCEPT-SOURCE-{index:03d}"}
+            for index in range(1, 10)
+        ],
+    ]
+    assert not validate_policy(source_profile_minimum_questions, 1)
+    assert not validate_policy([conceptual_questions[0] | {"id": "CONCEPT-ZERO-001"}], 0)
+
     below_floor_questions = [valid_question, *conceptual_questions, conceptual_questions[0] | {"id": "CONCEPT-004"}]
-    policy_codes = validate_policy(below_floor_questions, 1)
+    policy_codes = validate_policy(below_floor_questions, 1, 0.60)
     assert "artifact-minimum-below-global-floor" in policy_codes, policy_codes
     assert "artifact-question-count-below-minimum" in policy_codes, policy_codes
 
@@ -300,11 +490,11 @@ def main() -> int:
         for index in range(1, 61)
     ]
     forty_concepts = [conceptual_questions[0] | {"id": f"CONCEPT-100-{index:03d}"} for index in range(1, 41)]
-    assert not validate_policy([*sixty_artifacts, *forty_concepts], 60)
+    assert not validate_policy([*sixty_artifacts, *forty_concepts], 60, 0.60)
 
     fifty_nine_artifacts = sixty_artifacts[:59]
     forty_one_concepts = [conceptual_questions[0] | {"id": f"CONCEPT-059-{index:03d}"} for index in range(1, 42)]
-    policy_codes = validate_policy([*fifty_nine_artifacts, *forty_one_concepts], 59)
+    policy_codes = validate_policy([*fifty_nine_artifacts, *forty_one_concepts], 59, 0.60)
     assert "artifact-minimum-below-global-floor" in policy_codes, policy_codes
     assert "artifact-question-count-below-minimum" in policy_codes, policy_codes
 
@@ -687,8 +877,10 @@ spec:
     assert not valid_types and not codes, (valid_types, codes)
 
     print(
-        "Artifact evidence regression tests: PASS (per-surface 60%, atomic stem/explanation "
-        "bindings, native artifacts, readability, and Mermaid rendering)"
+        "Artifact evidence regression tests: PASS (source-profile format, decision-pattern, official/observed "
+        "scope, pattern-based official-scope extrapolation, and stem/option 2x2 validation, minimums without a "
+        "universal ratio, optional per-surface ratio floors, atomic stem/explanation bindings, native artifacts, "
+        "readability, and Mermaid rendering)"
     )
     return 0
 

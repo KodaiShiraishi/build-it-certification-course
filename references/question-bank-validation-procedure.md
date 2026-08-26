@@ -29,6 +29,8 @@
   "difficulty": "medium",
   "cognitive_type": "application",
   "question_type": "single_choice",
+  "stem_artifact_types": [],
+  "stem_artifact_evidence": [],
   "artifact_types": ["configuration"],
   "stem": "An operator must deny object deletion. Which JSON policy candidate produces an explicit deny for s3:DeleteObject?",
   "options": {
@@ -108,7 +110,9 @@
 }
 ```
 
-基本必須項目は `id`、`objective`、`difficulty`、`cognitive_type`、`stem`、`options`、`correct`、`correct_explanation`、`wrong_explanations`、`links` とする。`question_set`、`assessment_surface`、`question_type`、`sources`、`source_reviewed_at`、`artifact_types`、`artifact_evidence` は最終検査で必須化する。`question_set`は通常問題を `practice`、模擬問題を `mock` として一問ごとに保持し、`assessment_surface`は `practice-bank`、`practice-exam-a`、`practice-exam-b`等、学習者が独立して開始・採点できる表示単位を保持する。`links`は関連講義または用語、`sources`は正答を支える公式一次情報として分ける。`artifact_types` は60%へ算入するOption Artifactを [exam-question-fidelity.md](exam-question-fidelity.md) の共通分類で保持し、Stem-onlyまたは概念問題は空Listにする。算入問題の `artifact_evidence` は各宣言Typeと全Optionの組合せにつき一件を持ち、`type`、`location`（`option:<key>`のみ）、その候補にExact substringとして存在する `content`、判断に必要な行・Field・Operator・値・関係を示す候補固有の `decision_binding` を保持する。さらに `artifact_selection` に `task: select_correct_artifact`、要求、全Optionを覆うDecision axis、共通Fixture／Schema／Dry run／導出検査のReference、候補別結果、検証済み正答集合、Artifact固有の `stem_contract`、全Optionの `explanation_bindings` を持たせる。概念問題とStem-only問題は `artifact_types: []`、`artifact_evidence: []` にする。
+基本必須項目は `id`、`objective`、`difficulty`、`cognitive_type`、`stem`、`options`、`correct`、`correct_explanation`、`wrong_explanations`、`links` とする。`question_set`、`assessment_surface`、`question_type`、`sources`、`source_reviewed_at`、Stem用の `stem_artifact_types`／`stem_artifact_evidence`、Option用の `artifact_types`／`artifact_evidence` は最終検査で必須化する。`question_set`は通常問題を `practice`、模擬問題を `mock` として一問ごとに保持し、`assessment_surface`は `practice-bank`、`practice-exam-a`、`practice-exam-b`等、学習者が独立して開始・採点できる表示単位を保持する。`links`は関連講義または用語、`sources`は正答を支える公式一次情報として分ける。
+
+`stem_artifact_types` はStem内でLearner-visibleな実体Artifactを判断に使うType、`stem_artifact_evidence` は `location: "stem"`、Stem内のExact `content`、その内容が正答判断へ必要な理由を保持する。JSON等の形式名・製品名・作業名だけのProseは空Listにする。`artifact_types` はOption Artifactを [exam-question-fidelity.md](exam-question-fidelity.md) の共通分類で保持する。Option算入問題の `artifact_evidence` は各宣言Typeと全Optionの組合せにつき一件を持ち、`type`、`location`（`option:<key>`のみ）、その候補にExact substringとして存在する `content`、判断に必要な行・Field・Operator・値・関係を示す候補固有の `decision_binding` を保持する。さらに `artifact_selection` に `task: select_correct_artifact`、要求、全Optionを覆うDecision axis、共通Fixture／Schema／Dry run／導出検査のReference、候補別結果、検証済み正答集合、Artifact固有の `stem_contract`、全Optionの `explanation_bindings` を持たせる。Stem Artifactだけの問題はOption側を `artifact_types: []`、`artifact_evidence: []` にし、概念問題は両Locationを空Listにする。
 
 `stem_contract` は、learner-visible StemにExact substringとして存在する `artifact_request` と、`scenario.context`、`scenario.input_or_state`、一件以上の `scenario.hard_constraints`、`scenario.expected_observation` を保持する。`deletion_test.artifact_candidates_required` を `true` にし、候補を隠すと解けないことを確認したReview／Fixtureを `review_reference` へ記録する。ValidatorはHard constraint、期待する観測、Decision axis、候補別結果を数値正規化したSignatureとしてBank全体で比較する。Actor、ID、数値Literal、背景文だけを変えて同じ判断を再利用したArtifact問題を拒否する。
 
@@ -134,7 +138,7 @@
 
 `credential_level` は `associate-equivalent`、`professional-equivalent`、`not-applicable` のいずれかとし、ベンダーの公式資格体系、想定経験、試験対象から判断した根拠を別の追跡可能な記録へ残す。`not-applicable` でユーザー指定もない場合は、問題作成前に完成総数を確認する。
 
-通常問題集の `work_mode` は新規を `new`、一問以上ある既存通常問題集の変更を `existing` とする。`existing` では正の `baseline_total` とBaseline Hash比較を必須にし、`new` ではBaselineを省略する。これにより、既存通常問題集の全面整備やユーザー指定件数でも、着手前問題の全置換を検査なしで通さない。模擬試験の目標ファイルには `work_mode` とPractice用Count Policyを入れない。
+通常問題集の `work_mode` は新規を `new`、一問以上ある既存通常問題集の変更を `existing` とする。`existing` では正の `baseline_total` とBaseline Hash比較を必須にし、`new` ではBaselineを省略する。ユーザーが全面再作成を明示した場合もCount policy上は `existing` としてBaselineを保持するが、旧Corpusの非流用、Authoring前のSource profile、新ID namespaceまたは全面置換Manifestを別Gateで証明する。これにより、既存通常問題集の全面再作成やユーザー指定件数でも、着手前問題の全置換を検査なしで通さない。模擬試験も全面再作成の対象なら同じ非流用・Source-profile Gateを適用する。
 
 `count_mode` は次のいずれかとする。
 
@@ -191,6 +195,123 @@ IAM-009,removed,ユーザーが重複問題の削除を明示,user-message-2026-
     "diagnosis": 250,
     "design_decision": 200
   },
+  "question_source_profile": {
+    "analyzed_before_authoring": true,
+    "sample_size": 20,
+    "observed_question_type_counts": {
+      "single_choice": 16,
+      "multiple_response": 4
+    },
+    "observed_primary_decision_pattern_counts": {
+      "service_or_feature_selection": 8,
+      "configuration_or_permission_change": 5,
+      "failure_diagnosis": 4,
+      "cost_performance_tradeoff": 3
+    },
+    "scope_analysis": {
+      "official_weight_status": "published",
+      "official_domain_weights": {
+        "D1": 0.34,
+        "D2": 0.26,
+        "D3": 0.22,
+        "D4": 0.18
+      },
+      "official_objectives": ["D1", "D2", "D3", "D4"],
+      "observed_primary_objective_counts": {
+        "D1": 7,
+        "D2": 5,
+        "D3": 4,
+        "D4": 0,
+        "unmapped": 4
+      },
+      "observed_primary_content_family_counts": {
+        "ingestion_and_transformation": 7,
+        "data_store_management": 5,
+        "operations_and_monitoring": 4,
+        "security_and_governance": 4
+      },
+      "observed_service_feature_counts": {
+        "object storage": 6,
+        "managed ETL": 5,
+        "stream processing": 4
+      },
+      "observed_integration_pattern_counts": {
+        "source_to_ingestion_to_lake": 5,
+        "event_to_stream_processor": 3
+      },
+      "observed_lifecycle_stage_counts": {
+        "ingest": 7,
+        "transform": 5,
+        "operate": 4,
+        "secure": 4
+      },
+      "observed_constraint_counts": {
+        "least_operational_overhead": 6,
+        "cost_optimization": 4,
+        "least_privilege": 3
+      },
+      "scope_gaps": [
+        "The small source does not cover every official objective."
+      ],
+      "authoring_scope_decisions": [
+        "Use official domain weights for final coverage and source observations for scenario depth."
+      ],
+      "scope_selection_patterns": [
+        {
+          "id": "constraint_to_managed_boundary",
+          "description": "The source turns an operational constraint into a managed-service boundary decision.",
+          "observed_count": 6,
+          "question_transformation": "Compare supported service behavior under the stated operational constraint."
+        }
+      ],
+      "official_scope_extrapolations": [
+        {
+          "objective": "D4",
+          "primary_source_topics": ["least-privilege access and data protection"],
+          "primary_source_urls": ["https://vendor.example/security-guide"],
+          "inferred_question_patterns": [
+            "Select the least-privilege control that preserves the required data flow."
+          ],
+          "basis_pattern_ids": ["constraint_to_managed_boundary"],
+          "confidence": "medium",
+          "reasoning": "The official objective contains the same constraint-to-boundary decision shape.",
+          "authoring_status": "adopted"
+        }
+      ]
+    },
+    "artifact_location_counts": {
+      "stem_artifact_questions": 4,
+      "option_artifact_questions": 6,
+      "both_stem_and_option_artifact_questions": 2,
+      "neither_artifact_questions": 12
+    },
+    "artifact_location_rates": {
+      "stem_artifact_rate": 0.2,
+      "option_artifact_rate": 0.3,
+      "both_stem_and_option_artifact_rate": 0.1,
+      "neither_artifact_rate": 0.6
+    },
+    "stem_artifact_by_type": {
+      "logs_metrics": 3,
+      "configuration": 1
+    },
+    "option_artifact_by_type": {
+      "configuration": 4,
+      "command": 2
+    },
+    "classification_rule": {
+      "mention_only_is_artifact": false,
+      "requires_learner_visible_material_and_decision_dependency": true
+    },
+    "authoring_targets": {
+      "practice-bank": {
+        "total": 1000,
+        "minimum_questions_with_stem_artifacts": 200,
+        "minimum_questions_with_option_artifacts": 300,
+        "minimum_questions_with_both_artifacts": 100
+      }
+    }
+  },
   "artifact_policy": {
     "calibration_evidence": [
       {
@@ -207,30 +328,30 @@ IAM-009,removed,ユーザーが重複問題の削除を明示,user-message-2026-
       }
     ],
     "calibration_note": "Official objectives and samples require configuration, command, and diagnostic artifact reasoning.",
-    "minimum_questions_with_artifacts": 600,
+    "minimum_questions_with_artifacts": 300,
     "assessment_surfaces": {
       "practice-bank": {
         "total": 1000,
-        "minimum_questions_with_artifacts": 600,
+        "minimum_questions_with_artifacts": 300,
         "minimum_by_type": {
-          "configuration": 220,
-          "logs_metrics": 160
+          "configuration": 120,
+          "command": 80
         }
       }
     },
     "minimum_by_type": {
-      "command": 180,
-      "configuration": 220,
-      "logs_metrics": 160,
-      "diagram_ui": 80
+      "command": 80,
+      "configuration": 120
     }
   }
 }
 ```
 
-実際には公式試験目標をすべて列挙する。`total` と実数の不一致に加え、目標数、許可されない問題形式、形式別件数、難易度、思考タイプと実数の不一致はエラーにする。公式ガイドが形式別比率を公開していない場合も、`allowed_question_types`には公式に許可された形式を、`question_types`には教材として設計した件数を入れ、その配分理由を別途記録する。`artifact_policy.calibration_evidence` には現行公式ガイドと公式Sample／Practiceの調査結果を含め、Login必須、未発見、旧版もStatusとして残す。`artifact_policy.assessment_surfaces`へ公開Navigation上の全独立問題面と各総数・最低数を宣言し、各問の `assessment_surface` と完全一致させる。全体と各Surfaceの `minimum_questions_with_artifacts` は少なくとも `ceil(total × 0.60)` とし、65問なら39問未満を許可しない。最終検査では `--require-course-count-policy`、`--require-metadata-targets`、`--require-artifact-policy` を使い、Question Set、Assessment Surface、Level、根拠、Count Mode、標準件数またはユーザー指定、問題形式、難易度、思考タイプ、公式Calibration Evidence、各宣言Typeの全Option `artifact_evidence`、有効な `artifact_selection`、`stem_contract`、全Optionの `explanation_bindings`、検証済み正答集合、Surface別60%下限、種類別最低数の省略・不一致を失敗にする。Stem-only、候補不足、同一候補、結果差なし、再利用Scenario契約、候補と一致しない旧解説、架空Wrapper、100文字超の行、Raw Mermaidは件数へ数えない。
+実際には公式試験目標をすべて列挙する。`total` と実数の不一致に加え、目標数、許可されない問題形式、形式別件数、難易度、思考タイプと実数の不一致はエラーにする。公式ガイドが形式別比率を公開していない場合も、`allowed_question_types`には公式に許可された形式を、`question_types`には教材として設計した件数を入れ、その配分理由を別途記録する。問題本文を作る前に `question_source_profile` へSource母数、問題形式、主判断Pattern、公式Weight／Objective、観察した主Objective・主内容Family、Service／Feature・Integration・Lifecycle・制約、Scope gap、Authoring scope decision、`scope_selection_patterns`、`official_scope_extrapolations`、Stem Artifact、Option Artifact、両方、どちらでもない問題の件数・割合、位置別Type件数、分類規則、Authoring targetを保存する。`--require-question-source-profile` でPrimary分布とSource母数、公式Weight、観察Objectiveと公式範囲、Scope Inventory、出題化Pattern、Source未観察Objectiveの一次情報ベースExtrapolation、2×2と割合の整合を検査する。形式名への言及だけをArtifactへ数えない。
 
-模擬試験の目標ファイルには `question_set: "mock"` と模擬問題だけの `total`、各分布、各Practice／Mock formの `assessment_surfaces`を入れ、各問にも `question_set: "mock"` と対応する `assessment_surface` を持たせる。同じ `--require-course-count-policy --require-artifact-policy` で集合分離、件数、各Formの60%を検査するが、`credential_level`、`count_mode`、500／1,000問の標準は適用しない。別JSONLへ分ける場合も各Formへ個別に両Gateを実行し、一つの模擬試験だけの成功を全Formの成功とみなさない。
+`artifact_policy.calibration_evidence` には現行公式ガイドと公式Sample／Practiceの調査結果を含め、Login必須、未発見、旧版もStatusとして残す。全講座共通の `artifact_target_ratio` 既定値は置かない。公式またはユーザーがOption比率を明示した場合だけ保持し、未指定ならSource profileから決めた `minimum_questions_with_artifacts` を直接使う。`artifact_policy.assessment_surfaces`へ公開Navigation上の全独立問題面と各総数・Option Artifact最低数を宣言し、各問の `assessment_surface` と完全一致させる。Stem側の最低数・割合・種類、両方、どちらでもない件数は `question_source_profile.authoring_targets` とプロジェクト固有のLocation別Gateで検査する。最終検査では `--require-course-count-policy`、`--require-metadata-targets`、`--require-artifact-policy` を使い、Question Set、Assessment Surface、Level、根拠、Count Mode、標準件数またはユーザー指定、問題形式、難易度、思考タイプ、公式Calibration Evidence、各宣言Typeの全Option `artifact_evidence`、有効な `artifact_selection`、`stem_contract`、全Optionの `explanation_bindings`、検証済み正答集合、Surface別明示最低数、明示時だけ比率下限、種類別最低数の省略・不一致を失敗にする。Option側では候補不足、同一候補、結果差なし、再利用Scenario契約、候補と一致しない旧解説、架空Wrapper、100文字超の行、Raw Mermaidを件数へ数えない。
+
+模擬試験の目標ファイルには `question_set: "mock"` と模擬問題だけの `total`、各分布、各Practice／Mock formの `assessment_surfaces`を入れ、各問にも `question_set: "mock"` と対応する `assessment_surface` を持たせる。同じ `--require-course-count-policy --require-artifact-policy` とLocation別Gateで集合分離、件数、各FormのStem／Option別明示最低数、明示時だけ各比率Floorを検査するが、`credential_level`、`count_mode`、500／1,000問の標準は適用しない。別JSONLへ分ける場合も各Formへ個別に全Gateを実行し、一つの模擬試験だけの成功を全Formの成功とみなさない。
 
 ## 3. 二段階ReviewをHash付きで記録する
 
@@ -301,6 +422,7 @@ python <skill-dir>/scripts/validate_question_bank.py questions.jsonl \
   --targets targets.json \
   --require-course-count-policy \
   --require-metadata-targets \
+  --require-question-source-profile \
   --require-artifact-policy \
   --review-ledger semantic-review.csv \
   --independent-review-ledger independent-review.csv \
@@ -331,7 +453,7 @@ Windowsで成功しても、公開CIがLinuxならCI上でも同じ検査を実�
 
 ## 9. プロジェクト固有形式へ接続する
 
-既存のYAML、CSV、PowerShellデータ、Markdownなどから共通JSONLへ変換する小さな読み取り専用アダプターを作る。生成元が既に同等の項目を持つなら二重管理せず、検査時だけ書き出す。Navigationまたは公開Page単位から `assessment_surface` を導出し、通常問題と各Practice／Mock formを別々に集計できるようにする。`format` やFamilyから `artifact_types`／`artifact_evidence` を合成してはならない。60%へ算入する問では、Learner-visibleな全Optionから実物断片と決定差分を抽出し、生成Markdown／HTMLにも同じ断片が残り、候補検証ReferenceがCIで実行されることを照合する。Stemにしか実物がない、全Optionを覆えない、共通検証がない、または自然文を架空Schemaへ包んだだけの場合は概念／補助問題として空Listにするか、問題Sourceを正しいArtifact-native候補選択問題へ修正する。
+既存のYAML、CSV、PowerShellデータ、Markdownなどから共通JSONLへ変換する小さな読み取り専用アダプターを作る。生成元が既に同等の項目を持つなら二重管理せず、検査時だけ書き出す。Navigationまたは公開Page単位から `assessment_surface` を導出し、通常問題と各Practice／Mock formを別々に集計できるようにする。`format` やFamilyから位置別Artifact Type／Evidenceを合成してはならない。Learner-visibleなStemと全Optionを別々に読み、実体Artifactと判断依存をExact evidenceへ変換する。Option Artifactへ算入する問では全Optionから実物断片と決定差分を抽出し、生成Markdown／HTMLにも同じ断片が残り、候補検証ReferenceがCIで実行されることを照合する。Stemにしか実物がない問題はStem Artifactへだけ算入する。全Optionを覆えない、共通検証がない、または自然文を架空Schemaへ包んだだけの場合はOption側を空Listにするか、問題Sourceを正しいArtifact-native候補選択問題へ修正する。形式名への言及だけならStem側も空Listにする。
 
 既存検査で代用する場合、少なくとも次の対応を記録する。
 
@@ -340,7 +462,7 @@ Windowsで成功しても、公開CIがLinuxならCI上でも同じ検査を実�
 - 資格Levelと公式根拠、Count Mode、標準件数またはユーザー指定、実数の一致
 - 問題形式、正答集合・順序・対応関係、Rendered Answerの一致
 - 公式Source、確認日、許可Host
-- 公式ガイドと公式Sample／Practiceの調査状態、全問のAssessment SurfaceとOption Artifact分類、全候補Evidence・決定差分・候補検証に合格したArtifact-native選択問題が各Surfaceの60%以上であること、Stem-only／架空Wrapper非算入、種類別最低数
+- Authoring前の公式ガイドと公式Sample／Practiceの調査状態、Source母数、Stem Artifact、Option Artifact、両方、どちらでもない問題の件数・割合、位置別Type件数、言及だけの非算入、および各Surfaceの軸別最低数。明示したTarget ratioだけFloorとして適用し、Option側は全候補Evidence・決定差分・候補検証に合格したArtifact-native選択問題だけを数える
 - Artifact固有のStem契約、Scenario contractの一意性、全Optionの候補差分／検証結果／正誤解説Binding、候補変更後の旧解説が0件であること
 - Artifact Sourceの100文字行長、生成HTMLのMermaid container、実DOMのSVG描画と390px横Overflow
 - 重複ID、問題文、解説
