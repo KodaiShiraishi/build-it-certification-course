@@ -177,7 +177,7 @@ python scripts/validate_learning_contract.py \
 
 ## 7. 問題集を量と質の両方で拡張する
 
-問題の新規作成または拡張では、先に [references/exam-question-fidelity.md](references/exam-question-fidelity.md)、[references/question-bank-quality-standard.md](references/question-bank-quality-standard.md)、[references/question-bank-validation-procedure.md](references/question-bank-validation-procedure.md) を読む。
+問題の新規作成または拡張では、先に [references/exam-question-fidelity.md](references/exam-question-fidelity.md)、[references/question-bank-quality-standard.md](references/question-bank-quality-standard.md)、[references/explanation-writing-standard.md](references/explanation-writing-standard.md)、[references/question-bank-validation-procedure.md](references/question-bank-validation-procedure.md) を読む。解説Sourceがない場合は `explanation-writing-standard.md` の候補別因果順を既定にし、解説Sourceがある場合はAuthoring前の `explanation_source_profile` で複数の完全例から反復して確認できた構成、順序、粒度、語調をその既定より優先する。Sourceが省略していても、全候補のCapability／Action、決定条件への適合／不適合、結果、Multiple Responseの集合完全性、技術的正確さは品質下限として残す。
 
 - ユーザーが完成総数を明示していない新規講座、または通常問題集の大幅増量・全面整備では、完成件数を Associate 相当は正確に500問、Professional 相当は正確に1,000問とする。これらは最低数ではなく既定の総数である。新規か既存かをWork Modeとして記録し、問題の限定修正、レビュー、公開だけの依頼を問題集全体の増量依頼へ広げず、既存件数を維持する `scope-exempt-existing` として扱う。
 - ユーザーが完成総数を指定した場合はその件数を優先する。「N問追加」は完成総数N問ではなく、着手前の有効問題数にN問を加えた件数として扱う。

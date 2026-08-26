@@ -71,7 +71,7 @@
 
 ## 4. 解説を書く
 
-ユーザーが解説Sourceを提供した場合は、解説Authoring前にその構成、説明順、候補別の粒度、語調、用語導入、比較、結論、Multiple Responseの扱いを分析する。複数例で反復して観察できるPatternを主要な書き方として優先し、以下の項目はSourceにない要素を補う最低品質要件として使う。Sourceの文章をCopyせず、一件だけの癖や不完全な境界断片を全問へ固定しない。Sourceの書き方と読みやすさ・技術的正確さが衝突する場合は、後者を守り、変更理由をSource profileへ残す。
+解説Authoring前に [explanation-writing-standard.md](explanation-writing-standard.md) を読む。解説Sourceがない場合は、同文書の「候補のCapability／Action → Scenarioの決定条件 → 適合／不適合の境界 → 結果」を既定の説明順にする。ユーザーが解説Sourceを提供した場合は、構成、説明順、候補別の粒度、語調、用語導入、比較、結論、Multiple Responseの扱いをAuthoring前に分析し、複数の完全な例で反復して観察できるPatternを既定スタイルより優先する。Sourceの文章をCopyせず、一件だけの癖や不完全な境界断片を全問へ固定しない。Sourceの書き方と読みやすさ・技術的正確さが衝突する場合は後者を守り、変更理由を `explanation_source_profile` へ残す。
 
 各問の解説に次を含める。
 
@@ -79,10 +79,11 @@
 2. この状況で正解になる決定的な条件
 3. 正答が問題をどう解決するか
 4. 各誤答が魅力的に見える理由と、この状況では不適切な理由
-5. 覚えるべき判断ルールまたはメンタルモデル
-6. 関連講義または用語へのリンク
+5. Multiple Responseでは正答集合が必要十分である理由
+6. 再利用できる判断ルール。ただし候補別説明の定型的な再掲になる場合は省略する
+7. 関連講義または用語へのリンク
 
-各候補の説明は、その候補が製品上で実際に行うこと、問題文のどの制約が決定的か、その制約へ適合するか外れるか、結果として何が起きるかを一続きにする。内部のFamily名、Case ID、`decision_rule`、正誤Label、Generatorの分類語を示すだけでは学習者向け解説にならない。正答解説だけを長くし、誤答を「要件を満たさない」で終わらせず、各誤答が魅力的に見える条件と今回外れる境界を区別する。
+各候補の説明は、その候補が製品上で実際に行うこと、問題文のどの制約が決定的か、その制約へ適合するか外れるか、結果として何が起きるかを一続きにする。内部のFamily名、Case ID、`decision_rule`、正誤Label、Generatorの分類語を示すだけでは学習者向け解説にならない。正答解説だけを長くし、誤答を「要件を満たさない」で終わらせず、各誤答が魅力的に見える条件と今回外れる境界を区別する。構造化Sourceを使う場合は、候補ごとに `candidate_capability`、`decisive_constraint`、`fit_or_mismatch`、`consequence` と、必要な候補だけ `valid_elsewhere`、Multiple Responseでは `required_role` を保持するか、同等の意味要素を追跡可能にする。
 
 Multiple Responseでは、各正答候補の個別理由だけでなく、その正答集合が必要十分である理由を示す。正答の一部だけを選ぶ、誤答を一つ追加する、選択数は合うが必要な役割が欠ける、といった集合としての失敗も解説する。
 
@@ -175,7 +176,7 @@ BlockerとMajorは必ず0件にする。Minorは原則修正し、残す場合�
 - [ ] Question Set、資格Levelと根拠、Count Mode、標準件数またはユーザー指定を記録し、機械検査が通る
 - [ ] 公式試験目標の空白がない
 - [ ] 現行公式ガイドと公式Sample／Practiceの調査状態、確認日、Access制約が記録され、問題本文作成前の `question_source_profile` がある
-- [ ] 解説Sourceがある場合、Authoring前の `explanation_source_profile` が構成、順序、候補単位、説明量、語調、比較、結論、Multiple Response、観察母数と例外を記録し、反復Patternを汎用Templateより優先している。逐語転載や一例だけの一律模倣はしていない
+- [ ] 解説Sourceがない場合、全問が `explanation-writing-standard.md` の候補別因果順を既定としている。解説Sourceがある場合、Authoring前の `explanation_source_profile` が構成、順序、候補単位、説明量、語調、比較、結論、Multiple Response、観察母数と例外を記録し、複数の完全例で反復したPatternを既定スタイルより優先している。逐語転載や一例だけの一律模倣はしていない
 - [ ] `question_source_profile` に公式Weight／全Objective、Sourceの問題形式・主判断Pattern・主Objective・主内容Family・Service／Feature・Integration・Lifecycle・制約、Scope gap、Authoring scope decisionがあり、各Primary分布の合計がSource母数と一致する
 - [ ] Sourceの出題化Patternを抽象化した `scope_selection_patterns` と、それを公式範囲全体・一次情報へ適用した `official_scope_extrapolations` がある。Source未観察の各公式Objectiveに採用済み候補があり、一次情報URL・根拠Pattern・確度・推論・採否を追跡できる
 - [ ] 最終BankのDomain／Objective件数が公式Coverageを満たし、Source観察を内容の深さ・Scenario・判断粒度へ反映しつつ、Source未観察の公式Objectiveを欠落させていない

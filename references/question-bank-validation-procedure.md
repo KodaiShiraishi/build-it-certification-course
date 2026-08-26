@@ -458,6 +458,7 @@ Windowsで成功しても、公開CIがLinuxならCI上でも同じ検査を実�
 既存検査で代用する場合、少なくとも次の対応を記録する。
 
 - 必須項目と選択肢別解説の完全性
+- [explanation-writing-standard.md](explanation-writing-standard.md) に定義した、解説Sourceがない場合の既定説明Contract（候補のCapability／Action、決定条件、適合／不適合、結果）と、Sourceがある場合の `explanation_source_profile` 優先。全候補の候補固有因果、近接誤答の境界、Multiple Responseの必要十分性を意味Reviewし、同じ接頭辞・末尾の大量反復を失敗させる
 - Question Setと通常問題／模擬問題の分離
 - 資格Levelと公式根拠、Count Mode、標準件数またはユーザー指定、実数の一致
 - 問題形式、正答集合・順序・対応関係、Rendered Answerの一致
