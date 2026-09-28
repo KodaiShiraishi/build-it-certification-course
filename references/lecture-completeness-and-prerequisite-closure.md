@@ -2,6 +2,8 @@
 
 講義の新規制作、大幅更新、または問題集に登場するService、Artifact、連携Patternを講義で学べるか監査するときに使う。
 
+必要知識を先に学べることは共通の品質要件とする。本書のサービスカテゴリ・固有Entry・全出現リンクに関する契約と厳格CLIは、[講座設定](course-settings.md) のサービス学習の導線を採用する場合に適用する。既存の個人用講座サイトではこの設定を継承する。別形式の教材には適した配置・検査を選ぶが、対象知識の説明と前提の充足を省略しない。
+
 ## 1. 講義の学習契約
 
 資格Levelは到達点であり、入口の暗黙前提ではない。Professional、Expert、Advanced等の講座でも、下位資格の取得や製品経験を、名称だけを理由に前提としない。前提にできるのは、次のいずれかだけである。
@@ -17,24 +19,26 @@
 
 ## 2. 問題集の全面再作成では問題から講義を作り直す
 
-ユーザーが既存問題の改修や増問ではなく、問題集の「作り直し」「全面再作成」「旧問題を流用しない再制作」を求めた場合は、講義も同じFresh-corpus境界で作り直す。これは新規講座の一般的な制作順ではなく、**全面再作成した問題を講座の到達点として先に固定し、その要求から既存講座の講義を逆設計するための順序契約**である。
+問題集の全面再作成では、新しい問題が要求する知識から講義を逆設計する。講義も依頼範囲に含まれる場合は同じ非流用境界で再制作する。問題内容の初期校正と、講義Link・表示を含む正式Reviewを分け、最終HashはLink確定後に固定する。
 
 必須順序は次のとおりとする。
 
 1. 公式試験範囲、一次情報、問題Source分析からAuthoring planを確定する。
-2. 旧問題と旧講義を生成Seedにせず、新しい正規問題Corpusを作成し、構造・意味・独立Reviewを完了してHashを固定する。
-3. 全問題のStem、全候補、正答・誤答解説、Artifact契約から、Foundation、Service、Artifact、IntegrationのRequirementを抽出した正規 `assessment_requirement_inventory` を生成する。
+2. 旧問題と旧講義を生成Seedにせず、新しい正規問題Corpusを作成する。代表例の読み比べ、正答性・曖昧さ・候補の初期校正を済ませ、問題内容を講義設計の入力として保存する。この段階はDraftであり、関連講義Linkの未確定を含む最終Gateや正式Review台帳のPASSを要求しない。
+3. 全問題のStem、全候補、正答・誤答解説、Artifact契約からFoundation、Service、Artifact、IntegrationのRequirementを抽出する。正規問題の `learning_requirements` と抽出漏れの意味確認をもとに `assessment_requirement_inventory` を生成し、講義制作の入力SnapshotとそのHashを記録する。
 4. Requirement集合を学習上の前提関係でClusterし、必要な講義数、章分割、導入順、Path、Service curriculum、Artifact grammar、Integration flowを決める。旧講義数や既存章立てを先に目標値へしない。
 5. 新しいLecture IDまたは明示的な全面置換Manifestの下で講義本文を作り直す。問題で正答を決めるMechanism、Failure、Evidence、Decision boundaryを、問題より前に学べる本文として教える。
-6. 新講義から学習契約Manifestを生成し、全Assessment requirementの100%閉包、講義の意味Review、生成再現性、learner-visible Markdown／HTMLを検証する。
+6. 新講義のInventoryから問題の関連Linkを割り当て、学習契約Manifestを生成する。正規問題・講義・生成表示をそろえて構造検査、全Requirementの閉包、講義の意味Review、生成再現性を検証する。
+7. Linkを含む完成問題で全問の意味・独立Reviewを完了し、最終 `question_corpus_hash` と台帳を確定する。初期校正の記録は判断材料として再利用できるが、DraftのHashを最終版の証拠として転記しない。
 
 旧講義のID、Path、本文、講義数はBaseline、非再利用監査、Link移行のためだけに参照できる。安定URLを保つためPathを再利用してもよいが、旧本文をSeed、Template、要約元、内容上限、または新問題の制約へ使わない。新問題を既存講義へ割り当てる、旧講義へ短い追記をする、Foundation／Service／Integrationの汎用補助ページだけを追加する、といった処理は講義全面再作成ではない。Domain／Task講義を含む再作成対象Corpusの本文そのものを、新問題Requirementから再設計する。
 
-問題Sourceは公式Objective、判断要求、必要知識を保持してよいが、講義再設計前の旧Lecture Pathを内容上の制約として保持しない。関連講義Linkは、新講義Inventoryが確定した後にRequirementから割り当てる。講義制作中に問題の正答性、曖昧さ、範囲逸脱等を発見して問題を修正した場合は、問題Corpus HashとRequirement Inventoryを更新し、影響する講義を再生成・再Reviewする。講義へ収めるためだけに問題のScenario、選択肢、正答を変えない。
+旧Lecture Pathを新問題の制約へ使わない。講義制作中に問題の正答性・曖昧さ・範囲逸脱を発見したら、DraftとRequirement Snapshotを更新して影響講義を直す。Link割当てだけでは必要知識を再設計しないが、最終HashにはそのLinkも含める。正式Review後の変更範囲と記録は [再レビュー基準](review-update-policy.md) に従う。講義へ収めるためだけにScenario、選択肢、正答を変えない。
 
 `lecture_rebuild_manifest` または同等の機械可読な証拠へ、最低限次を保持する。
 
 - 確定した正規問題ID集合と `question_corpus_hash`
+- 講義設計に使ったDraft SnapshotのHash。最終Corpus Hashとは別Fieldで保持する
 - 問題全件から生成した `assessment_requirement_inventory_hash`
 - 旧講義Inventory、旧本文集合のBaseline Hash、再作成対象Path
 - `old_lecture_seed_used=false` と、講義Generatorが読み込む正規Source一覧
@@ -101,17 +105,11 @@
 - Entry Evidenceは宣言された見出しのMarkdown section内に限定する。別Entry、Family総論、Metadata、Anchor、見出し、外部DocumentationをEvidenceにしない。
 - 全11 Dimensionを一文ずつ機械的に分断する必要はない。因果関係が読みやすい段落で複数Dimensionを扱えるが、少なくとも定義と目的、構成要素とMechanism、設定とSecurity、ReliabilityとObservability、Cost／Performanceと代替、IntegrationとWorked exampleを区別できるExact sliceで覆う。
 - 最低語数は短い用語定義を除外する補助Gateにだけ使う。Service名を除去した本文が別Entryと同一、またはFamily共通Templateだけで固有Mechanism、Evidence、Decision boundaryがない状態は、語数にかかわらず失敗させる。
-- 各Assessmentは learner-visible Stemと全候補から抽出した `named_services` と、対応する `service_entry_links` を持つ。両集合を完全一致させ、Entryを問題より前に置く。
+- 各Assessmentは learner-visible Stem・全候補・全解説から抽出した `named_services` と、対応する `service_entry_links` を持つ。両集合を完全一致させ、Entryを問題より前に置く。
 
 #### Service表記の直接Link契約
 
-各 `service_entry` は正式名称を含む `aliases` を持つ。講義およびAssessmentのlearner-visible Proseに正式名称またはaliasが現れたら、その表記自体を対応Entryの宣言Pathと固定Anchorへ直接Linkする。詳細は [service-mention-linking.md](service-mention-linking.md) に従う。
-
-- 正規講義Inventoryの全Pageと、正規AssessmentのSourceが指す全learner-visible Pageを走査する。AssessmentはStem、全候補、正答解説、全誤答解説を含む。
-- aliasはCourse内で一意に解決し、正式名称を必ず含む。`Amazon EKS`と`EKS`のような重なりは最長一致にし、短いaliasを長い表記の内部へ二重適用しない。
-- LinkはServices LandingやFamily Page先頭ではなく、固有EntryのAnchorへ直接向ける。外部Documentation Linkは一次情報として別に保持する。
-- fenced／inline code、Command、Configuration、URL、HTML属性、Markdown Link destinationは対象外にし、raw文字列置換で壊さない。
-- Manifestの自己申告だけで完了せず、Source Markdownとstrict build後の全生成HTMLで、裸alias、誤Link、Anchor欠落、重複IDを検査する。
+aliasの定義・最長一致・保護対象・正しいLink先・表示検証は [service-mention-linking.md](service-mention-linking.md) を正規基準にする。全講義とAssessmentのStem・全候補・全解説に適用する。必要知識一覧からの漏れの検査は、本書第5節の正規問題JSONL照合で補う。
 
 #### 通常講義でのService説明契約
 
@@ -261,7 +259,25 @@ Manifestの形は次のようにする。これはSchemaの抜粋であり、実
 }
 ```
 
-問題ID集合は正規問題Sourceから書き出したJSONLと完全一致させる。Manifestに存在する問題だけを検査して、未登録問題を見逃すことを許可しない。
+厳格検査の正規問題JSONLは、IDだけでなく `stem`、`options`、`correct_explanation`、`wrong_explanations` と次の `learning_requirements` を含める。プロジェクトのFieldが違う場合は読み取りAdapterで書き出す。
+
+```json
+{
+  "learning_requirements": {
+    "requirements": ["foundation.identity", "service.object-storage", "artifact.policy"],
+    "services": ["Object Storage"],
+    "artifact_types": ["policy-json"],
+    "integration_patterns": [],
+    "named_services": ["Object Storage Service"]
+  }
+}
+```
+
+これはField形の例であり、実問題の本文から抽出した値を使う。`requirements` は学習Unitまたは承認済みEntry assumptionのID、`services`・`artifact_types`・`integration_patterns` は学習契約側の語彙である。Option Artifactの粗い分類を無変換でコピーしない。
+
+`--require-assessment-inventory` は正規JSONLとManifestの全IDおよび上記集合の一致を検査する。固有Serviceの厳格検査時には `named_services` も照合し、Stem・全候補・全解説で観測した登録aliasが正規必要知識から抜けた場合に失敗する。Code・URLはalias検出から除く。IDだけの既存Exportは本文と必要知識を追加して移行し、検査を無効化して通さない。
+
+この照合だけで抽出の完全性は証明できない。未登録Service、暗黙の前提、Artifactの読解知識、Integrationの抽出漏れは、問題本文と必要知識一覧を突き合わせて意味Reviewする。Manifestを後から埋めた自己申告だけで100%閉包と報告しない。
 
 ## 6. 必須Gate
 
@@ -280,7 +296,7 @@ python scripts/validate_learning_contract.py \
   --require-service-mention-links
 ```
 
-この共通Commandでは `--require-service-curriculum`／`--navigation-jsonl`、固有Service Entry、Service表記Linkを必須にする。`--require-service-sections`／`--lecture-jsonl` は、ユーザーまたはプロジェクト仕様が講義内Serviceセクションを明示的に要求する場合だけ追加する。上部Navigation専用Validatorや生成HTML検査は追加Gateであり、包括的Curriculumの代替ではない。
+このCommandは個人用講座サイト設定の厳格な検査例であり、採用時にはサービス関連の引数も必須とする。別設定では `--require-assessment-inventory` による全問題の必要知識照合を保ち、採用した導線に対応する検査を使う。`--require-service-sections`／`--lecture-jsonl` は、講義内Serviceセクションを明示的に要求する場合だけ追加する。適用する以下の項目を検査計画へ対応づけ、設定の違いを理由に既存Gateを無断で弱めない。
 
 - Entry contractにない知識を暗黙に仮定している
 - 明示的なユーザー承認なしに下位資格取得を仮定している
@@ -334,7 +350,7 @@ python scripts/validate_learning_contract.py \
 - 講義Generatorが旧講義本文をSeedまたはTemplateとして読み込む、あるいは旧講義の完全な段落が正当な共通部分を除いて残る
 - 講義制作後に問題を修正したが、Requirement Inventory、影響講義、Review Hashを更新していない
 
-機械Gateは、宣言された関係とExact Evidenceの存在を検査する。説明が技術的に正しく、Dimensionを本当に教えているか、問題のRequirement列挙が完全かは意味Reviewで確認する。独立ReviewにはManifestだけでなく、正規問題、Learner-visible講義、Artifact実物を渡す。
+機械Gateは、正規問題との必要知識の一致、登録済みServiceの抽出漏れ、宣言された関係とExact Evidenceの存在を検査する。説明が技術的に正しく、Dimensionを本当に教えているか、問題のRequirement列挙が完全かは意味Reviewで確認する。独立ReviewにはManifestだけでなく、正規問題、Learner-visible講義、Artifact実物を渡す。
 
 ## 8. 完了条件
 
@@ -349,5 +365,5 @@ python scripts/validate_learning_contract.py \
 - 全Service Entry aliasが一意で正規Inventoryと一致し、全講義・Assessment Proseの各出現が対応Entryの固定Anchorへ直接Linkされ、裸・曖昧・誤Linkが0件である
 - Negative fixtureが意図どおり失敗する
 - 意味Reviewで前提漏れ、説明の飛躍、名だけのService解説、飾りのArtifactが残っていない
-- 問題集全面再作成では、確定した問題CorpusからRequirement Inventoryを生成した後に講義Inventoryと本文を作り直し、旧講義への割当てや追記だけで代用していない
+- 問題集全面再作成では、新Draftの必要知識から講義を作り直し、Link割当て後の正式Reviewで最終Corpus Hashを固定した。旧講義への割当てや追記だけで代用していない
 - `lecture_rebuild_manifest` が現行問題・Requirement・講義Hashと一致し、旧講義本文をSeedにしていないことと、問題修正時の下流再生成を証明する

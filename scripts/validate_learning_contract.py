@@ -132,8 +132,8 @@ def _validate_exact_slice(
     return True
 
 
-def _read_question_ids(paths: Iterable[Path], findings: list[Finding]) -> set[str]:
-    ids: set[str] = set()
+def _read_question_inventory(paths: Iterable[Path], findings: list[Finding]) -> dict[str, dict[str, Any]]:
+    inventory: dict[str, dict[str, Any]] = {}
     for path in paths:
         if not path.is_file():
             findings.append(Finding("missing-question-inventory", f"question inventory does not exist: {path}"))
@@ -150,10 +150,71 @@ def _read_question_ids(paths: Iterable[Path], findings: list[Finding]) -> set[st
             if not _nonempty_string(question_id):
                 findings.append(Finding("missing-question-id", f"{path}:{line_number}: missing string id"))
                 continue
-            if question_id in ids:
+            if question_id in inventory:
                 findings.append(Finding("duplicate-question-id", f"duplicate question id in inventory: {question_id}"))
-            ids.add(str(question_id))
-    return ids
+            inventory[str(question_id)] = item
+    return inventory
+
+
+def _question_texts(question: dict[str, Any]) -> list[str]:
+    texts: list[str] = []
+    def collect(value: Any) -> None:
+        if isinstance(value, str):
+            texts.append(value)
+        elif isinstance(value, dict):
+            for item in value.values():
+                collect(item)
+        elif isinstance(value, list):
+            for item in value:
+                collect(item)
+    for key in ("stem", "options", "correct_explanation", "wrong_explanations"):
+        collect(question.get(key))
+    return texts
+
+
+def _validate_canonical_requirements(
+    question: dict[str, Any], assessment: dict[str, Any],
+    alias_to_entry: dict[str, str], entries_by_id: dict[str, dict[str, Any]],
+    require_named_services: bool, findings: list[Finding],
+) -> None:
+    question_id = str(question["id"])
+    inventory = question.get("learning_requirements")
+    if not isinstance(inventory, dict):
+        findings.append(Finding("missing-canonical-learning-requirements", f"{question_id}: canonical question must include learning_requirements; an ID-only export cannot establish coverage"))
+        return
+    keys = ["requirements", "services", "artifact_types", "integration_patterns"]
+    if require_named_services:
+        keys.append("named_services")
+    for key in keys:
+        values = inventory.get(key)
+        if not isinstance(values, list) or any(not _nonempty_string(value) for value in values):
+            findings.append(Finding("invalid-canonical-learning-requirements", f"{question_id}: learning_requirements.{key} must be a list of non-empty strings"))
+            continue
+        if len(values) != len(set(values)):
+            findings.append(Finding("duplicate-canonical-learning-requirement", f"{question_id}: duplicate learning_requirements.{key}"))
+        if set(values) != set(str(value) for value in _list(assessment.get(key))):
+            findings.append(Finding("canonical-learning-requirements-mismatch", f"{question_id}: manifest {key} differs from the canonical question requirements"))
+    for key in ("stem", "correct_explanation"):
+        if not _nonempty_string(question.get(key)):
+            findings.append(Finding("missing-canonical-question-content", f"{question_id}: canonical {key} is required for requirement review"))
+    for key in ("options", "wrong_explanations"):
+        if not isinstance(question.get(key), dict):
+            findings.append(Finding("missing-canonical-question-content", f"{question_id}: canonical {key} must be an object"))
+    if not require_named_services or not alias_to_entry:
+        return
+    aliases = sorted(alias_to_entry, key=lambda value: (-len(value), value))
+    pattern = re.compile(rf"(?<![\w])(?:{'|'.join(re.escape(alias) for alias in aliases)})(?![\w])")
+    observed: set[str] = set()
+    for text in _question_texts(question):
+        mask, _ = _markdown_prose_map(text)
+        for match in pattern.finditer(text):
+            if not any(mask[match.start():match.end()]):
+                observed.add(alias_to_entry[match.group(0)])
+    declared = set(str(value) for value in _list(inventory.get("named_services")))
+    for entry_id in observed:
+        name = str(entries_by_id.get(entry_id, {}).get("name", ""))
+        if name not in declared:
+            findings.append(Finding("canonical-service-mention-unbound", f"{question_id}: visible service {name!r} is absent from canonical learning_requirements.named_services"))
 
 
 def _read_lecture_inventory(paths: Iterable[Path], findings: list[Finding]) -> dict[str, str]:
@@ -1468,7 +1529,8 @@ def validate_manifest(
     if require_assessment_inventory and not inventory_paths:
         findings.append(Finding("assessment-inventory-required", "strict validation requires at least one canonical question JSONL"))
     if inventory_paths:
-        inventory_ids = _read_question_ids(inventory_paths, findings)
+        inventory = _read_question_inventory(inventory_paths, findings)
+        inventory_ids = set(inventory)
         assessment_ids = set(assessments_by_id)
         if inventory_ids != assessment_ids:
             findings.append(
@@ -1477,6 +1539,13 @@ def validate_manifest(
                     f"manifest/question ID mismatch missing={sorted(inventory_ids - assessment_ids)} extra={sorted(assessment_ids - inventory_ids)}",
                 )
             )
+        if require_assessment_inventory:
+            for question_id in sorted(inventory_ids & assessment_ids):
+                _validate_canonical_requirements(
+                    inventory[question_id], assessments_by_id[question_id],
+                    service_alias_to_entry, service_entries_by_id,
+                    strict_named_service_entries, findings,
+                )
 
     return findings
 
@@ -1518,8 +1587,8 @@ def main() -> int:
         print(f"Learning contract validation failed: {len(findings)} error(s)")
         return 1
     print(
-        "Learning contract validation passed: prerequisite closure, top-level Service curriculum, "
-        "in-lecture Service sections, named-Service mention links, and learner-visible evidence are complete"
+        "Learning contract structural checks passed for the supplied inventories and evidence. "
+        "Requirement extraction completeness and teaching quality still require semantic review."
     )
     return 0
 

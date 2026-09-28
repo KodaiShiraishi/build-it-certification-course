@@ -574,8 +574,8 @@ def _validate_correct(
             findings.append(Finding("ERROR", "invalid-correct", f"{question_id}: ordering correct must be an ordered list"))
             return None
         keys = [str(item) for item in correct]
-        if len(keys) != len(set(keys)) or set(keys) != option_keys:
-            findings.append(Finding("ERROR", "invalid-correct", f"{question_id}: ordering must contain every option key exactly once"))
+        if len(keys) < 2 or len(keys) != len(set(keys)) or not set(keys).issubset(option_keys):
+            findings.append(Finding("ERROR", "invalid-correct", f"{question_id}: ordering requires at least two distinct existing option keys"))
             return None
         return set(keys)
     if question_type == "matching":
@@ -648,7 +648,7 @@ def validate_structure(
             findings.append(Finding("ERROR", "duplicate-option-text", f"{question_id}: option text is duplicated"))
 
         question_type = resolved_question_type(question)
-        if question_type == "multiple_response" and isinstance(question.get("selection_instruction"), str):
+        if question_type in {"multiple_response", "ordering"} and isinstance(question.get("selection_instruction"), str):
             validate_text_hygiene(
                 question_id,
                 "selection-instruction",
@@ -663,6 +663,20 @@ def validate_structure(
         correct_keys = _validate_correct(question_id, question_type, question["correct"], option_keys, findings)
         if correct_keys is None:
             continue
+        if question_type == "ordering":
+            mode = question.get("ordering_mode", "all")
+            if not isinstance(mode, str) or mode not in {"all", "subset"}:
+                findings.append(Finding("ERROR", "invalid-ordering-mode", f"{question_id}: ordering_mode must be all or subset"))
+            elif mode == "all" and correct_keys != option_keys:
+                findings.append(Finding("ERROR", "ordering-all-options-required", f"{question_id}: all mode must use every option; use subset mode for select-and-order tasks"))
+            elif mode == "subset":
+                instruction = question.get("selection_instruction")
+                if not isinstance(instruction, str) or not instruction.strip():
+                    findings.append(Finding("ERROR", "missing-selection-instruction", f"{question_id}: subset ordering must state selection and one-use rules"))
+            if "select_count" in question:
+                count = question["select_count"]
+                if isinstance(count, bool) or not isinstance(count, int) or count != len(correct_keys):
+                    findings.append(Finding("ERROR", "selection-count-mismatch", f"{question_id}: select_count must equal the ordered answer length"))
         if question_type == "multiple_response":
             selection_instruction = question.get("selection_instruction")
             if "select_count" in question:
@@ -682,7 +696,7 @@ def validate_structure(
             findings.append(Finding("ERROR", "invalid-links", f"{question_id}: links must be a non-empty list of text links"))
 
         actual_wrong = {str(key) for key in wrong}
-        if question_type in {"single_choice", "true_false", "multiple_response"}:
+        if question_type in {"single_choice", "true_false", "multiple_response", "ordering"}:
             expected_wrong = option_keys - correct_keys
             for key in sorted(expected_wrong - actual_wrong):
                 findings.append(Finding("ERROR", "missing-wrong-explanation", f"{question_id}: missing explanation for {key}"))
@@ -1168,50 +1182,50 @@ def _artifact_explanation_text(question: dict[str, Any], option_key: str) -> str
     return explanation if isinstance(explanation, str) else None
 
 
+def _artifact_candidate_fingerprint(content: str) -> str:
+    """Ignore formatting where parseable; preserve operators and literal values."""
+    language, body = _artifact_fence(content)
+    if language in {"python", "py"}:
+        try:
+            return "python:" + ast.dump(ast.parse(body), include_attributes=False)
+        except SyntaxError:
+            pass
+    if language == "json":
+        try:
+            return "json:" + json.dumps(json.loads(body), sort_keys=True, ensure_ascii=False)
+        except (ValueError, TypeError):
+            pass
+    return unicodedata.normalize("NFC", content.replace("\r\n", "\n").replace("\r", "\n")).strip()
+
+
 def _artifact_stem_contract_signature(question: dict[str, Any]) -> str | None:
+    """Compare candidate decisions, independent of labels and narrative padding.
+
+    This catches repeated candidate sets, not every semantic paraphrase. An
+    input-dependent reuse must record actual fixture_inputs; review still checks
+    whether that input difference teaches a different decision.
+    """
     selection = question.get("artifact_selection")
-    contract = selection.get("stem_contract") if isinstance(selection, dict) else None
-    scenario = contract.get("scenario") if isinstance(contract, dict) else None
-    if not isinstance(scenario, dict):
+    options = question.get("options")
+    if not isinstance(selection, dict) or not isinstance(options, dict):
         return None
-    parts: list[str] = []
-    for field in ARTIFACT_STEM_SCENARIO_FIELDS:
-        value = scenario.get(field)
-        if not isinstance(value, str) or not value.strip():
-            return None
-        if field == "expected_observation":
-            parts.append(value)
-    constraints = scenario.get("hard_constraints")
-    if (
-        not isinstance(constraints, list)
-        or not constraints
-        or any(not isinstance(item, str) or not item.strip() for item in constraints)
-    ):
-        return None
-    parts.extend(str(item) for item in constraints)
-    axes = selection.get("decision_axes")
-    if isinstance(axes, list):
-        for axis in axes:
-            if not isinstance(axis, dict):
-                continue
-            name = axis.get("name")
-            if isinstance(name, str):
-                parts.append(name)
-            option_values = axis.get("option_values")
-            if isinstance(option_values, dict):
-                parts.extend(
-                    str(value)
-                    for _, value in sorted(option_values.items(), key=lambda pair: str(pair[0]))
-                )
-    validation = selection.get("validation")
-    candidate_results = validation.get("candidate_results") if isinstance(validation, dict) else None
-    if isinstance(candidate_results, dict):
-        parts.extend(
-            str(value)
-            for _, value in sorted(candidate_results.items(), key=lambda pair: str(pair[0]))
+    evidence = question.get("artifact_evidence", [])
+    correct = question.get("correct")
+    correct_keys = {correct} if isinstance(correct, str) else {str(key) for key in correct} if isinstance(correct, list) else set()
+    candidates: list[str] = []
+    for key in options:
+        slices = sorted(
+            (str(item.get("type")), _artifact_candidate_fingerprint(str(item.get("content", ""))))
+            for item in evidence
+            if isinstance(item, dict) and item.get("location") == f"option:{key}"
         )
-    signature = normalize_text("\n".join(parts))
-    return signature or None
+        if not slices:
+            return None
+        candidates.append(json.dumps({"artifacts": slices, "selected": key in correct_keys}, ensure_ascii=False))
+    validation = selection.get("validation")
+    inputs = validation.get("fixture_inputs") if isinstance(validation, dict) else None
+    payload = {"candidates": sorted(candidates), "fixture_inputs": inputs}
+    return json.dumps(_canonicalize_hash_value(payload), ensure_ascii=False, sort_keys=True)
 
 
 def _validate_artifact_stem_contract(
@@ -1823,7 +1837,9 @@ def validate_question_artifact_evidence(
                         )
                         selection_valid = False
                     else:
-                        normalized_results.add(normalize_exact_text(result))
+                        # Keep brackets, operators and case: [1, 2] and [[1], [2]]
+                        # are different results even when their word tokens match.
+                        normalized_results.add(" ".join(unicodedata.normalize("NFC", result).split()))
                 if len(normalized_results) < 2:
                     findings.append(
                         Finding(
@@ -1859,7 +1875,6 @@ def validate_question_artifact_evidence(
             raw_validation = selection.get("validation")
             raw_results = raw_validation.get("candidate_results") if isinstance(raw_validation, dict) else None
             artifact_excerpts: set[str] = set()
-            result_excerpts: set[str] = set()
             for raw_key, raw_binding in explanation_bindings.items():
                 key = str(raw_key)
                 label = f"{question_id}/artifact_selection.explanation_bindings[{key!r}]"
@@ -1955,7 +1970,6 @@ def validate_question_artifact_evidence(
                     selection_valid = False
 
                 artifact_excerpts.add(normalize_exact_text(str(artifact_excerpt)))
-                result_excerpts.add(normalize_exact_text(str(result_excerpt)))
 
             if len(artifact_excerpts) != len(option_keys):
                 findings.append(
@@ -1963,15 +1977,6 @@ def validate_question_artifact_evidence(
                         "ERROR",
                         "artifact-explanation-artifacts-not-distinct",
                         f"{question_id}: each option explanation must cite a distinct decisive artifact slice",
-                    )
-                )
-                selection_valid = False
-            if len(result_excerpts) != len(option_keys):
-                findings.append(
-                    Finding(
-                        "ERROR",
-                        "artifact-explanation-results-not-distinct",
-                        f"{question_id}: each option explanation must cite a distinct validated candidate result",
                     )
                 )
                 selection_valid = False
@@ -2893,8 +2898,8 @@ def validate_artifact_policy(
                 Finding(
                     "ERROR",
                     "artifact-scenario-contract-reused",
-                    "artifact-native questions reuse the same normalized "
-                    f"constraints/observation/decision/results contract: {preview}{suffix}",
+                    "artifact-native questions reuse the same candidates, answer roles and recorded "
+                    f"fixture inputs despite labels or narrative differences: {preview}{suffix}",
                 )
             )
 
@@ -3147,6 +3152,7 @@ def validate_review_ledger(
 def validate_reviewer_independence(
     semantic_reviewers: dict[str, str], independent_reviewers: dict[str, str], findings: list[Finding]
 ) -> None:
+    """Reject identical labels, without claiming authenticated reviewer independence."""
     for question_id in sorted(set(semantic_reviewers) & set(independent_reviewers)):
         semantic = reviewer_identity(semantic_reviewers[question_id])
         independent = reviewer_identity(independent_reviewers[question_id])
@@ -3373,6 +3379,8 @@ def main() -> int:
 
     failed = error_count > 0 or (args.fail_on_warnings and warning_count > 0)
     print("RESULT: FAIL" if failed else "RESULT: PASS")
+    if args.review_ledger is not None or args.independent_review_ledger is not None:
+        print("Review ledger checks cover IDs, status, labels and supplied hashes; verify actual reviewer identity, scope and independence against review evidence separately.")
     return 1 if failed else 0
 
 

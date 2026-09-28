@@ -15,6 +15,8 @@ from typing import Any
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
+from question_bank_test_fixtures import make_artifact_question
+
 from validate_question_bank import (  # noqa: E402
     Finding,
     validate_artifact_policy,
@@ -74,46 +76,6 @@ def validate_policy(
     findings: list[Finding] = []
     validate_artifact_policy(targets, questions, True, ["vendor.example"], findings)
     return {finding.code for finding in findings}
-
-
-def question_variant(
-    question: dict[str, Any],
-    question_id: str,
-    assessment_surface: str | None = None,
-) -> dict[str, Any]:
-    variant = copy.deepcopy(question)
-    digit_words = {
-        "0": "zero",
-        "1": "one",
-        "2": "two",
-        "3": "three",
-        "4": "four",
-        "5": "five",
-        "6": "six",
-        "7": "seven",
-        "8": "eight",
-        "9": "nine",
-    }
-    contract_token = "".join(digit_words.get(character, character) for character in question_id)
-    original_context = variant["artifact_selection"]["stem_contract"]["scenario"]["context"]
-    variant_context = f"{original_context} for scenario {question_id}"
-    original_observation = variant["artifact_selection"]["stem_contract"]["scenario"][
-        "expected_observation"
-    ]
-    variant_observation = f"{original_observation} for contract {contract_token}"
-    variant["id"] = question_id
-    variant["stem"] = variant["stem"].replace(original_context, variant_context)
-    variant["stem"] = variant["stem"].replace(original_observation, variant_observation)
-    variant["artifact_selection"]["stem_contract"]["scenario"]["context"] = variant_context
-    variant["artifact_selection"]["stem_contract"]["scenario"][
-        "expected_observation"
-    ] = variant_observation
-    variant["artifact_selection"]["stem_contract"]["deletion_test"]["review_reference"] = (
-        f"reviews/artifact-deletion.csv#{question_id}"
-    )
-    if assessment_surface is not None:
-        variant["assessment_surface"] = assessment_surface
-    return variant
 
 
 def main() -> int:
@@ -454,8 +416,8 @@ def main() -> int:
         }
         for index in range(1, 4)
     ]
-    second_artifact = question_variant(valid_question, "PASS-CODE-002")
-    third_artifact = question_variant(valid_question, "PASS-CODE-003")
+    second_artifact = make_artifact_question("filter", "PASS-CODE-002")
+    third_artifact = make_artifact_question("total", "PASS-CODE-003")
     exact_floor_questions = [valid_question, second_artifact, third_artifact, *conceptual_questions[:2]]
     assert not validate_policy(exact_floor_questions, 3)
 
@@ -485,16 +447,13 @@ def main() -> int:
     assert "artifact-minimum-below-global-floor" in policy_codes, policy_codes
     assert "artifact-question-count-below-minimum" in policy_codes, policy_codes
 
-    sixty_artifacts = [
-        question_variant(valid_question, f"ARTIFACT-{index:03d}")
-        for index in range(1, 61)
-    ]
-    forty_concepts = [conceptual_questions[0] | {"id": f"CONCEPT-100-{index:03d}"} for index in range(1, 41)]
-    assert not validate_policy([*sixty_artifacts, *forty_concepts], 60, 0.60)
-
-    fifty_nine_artifacts = sixty_artifacts[:59]
-    forty_one_concepts = [conceptual_questions[0] | {"id": f"CONCEPT-059-{index:03d}"} for index in range(1, 42)]
-    policy_codes = validate_policy([*fifty_nine_artifacts, *forty_one_concepts], 59, 0.60)
+    six_artifacts = [make_artifact_question(case) for case in
+                     ("filter", "total", "flatten", "descending", "stable_unique", "count")]
+    four_concepts = [conceptual_questions[0] | {"id": f"CONCEPT-{index:03d}"} for index in range(4)]
+    assert not validate_policy([*six_artifacts, *four_concepts], 6, 0.60)
+    # Six out of ten is the exact boundary; five out of ten must fail.
+    five_concepts = [*four_concepts, conceptual_questions[0] | {"id": "CONCEPT-EXTRA"}]
+    policy_codes = validate_policy([*six_artifacts[:5], *five_concepts], 5, 0.60)
     assert "artifact-minimum-below-global-floor" in policy_codes, policy_codes
     assert "artifact-question-count-below-minimum" in policy_codes, policy_codes
 
@@ -779,18 +738,10 @@ spec:
     assert valid_types == {"diagram_ui"} and not codes, (valid_types, codes)
 
     surface_a = [
-        question_variant(
-            valid_question,
-            f"SURFACE-A-{index:03d}",
-            "practice-exam-a",
-        )
-        for index in range(1, 6)
+        make_artifact_question(case, f"SURFACE-A-{index}", "practice-exam-a")
+        for index, case in enumerate(("filter", "total", "flatten", "descending", "stable_unique"))
     ]
-    surface_b_artifact = question_variant(
-        valid_question,
-        "SURFACE-B-001",
-        "practice-exam-b",
-    )
+    surface_b_artifact = make_artifact_question("count", "SURFACE-B-001", "practice-exam-b")
     surface_b_concepts = [
         {
             **conceptual_questions[0],

@@ -114,27 +114,26 @@
 
 `stem_artifact_types` はStem内でLearner-visibleな実体Artifactを判断に使うType、`stem_artifact_evidence` は `location: "stem"`、Stem内のExact `content`、その内容が正答判断へ必要な理由を保持する。JSON等の形式名・製品名・作業名だけのProseは空Listにする。`artifact_types` はOption Artifactを [exam-question-fidelity.md](exam-question-fidelity.md) の共通分類で保持する。Option算入問題の `artifact_evidence` は各宣言Typeと全Optionの組合せにつき一件を持ち、`type`、`location`（`option:<key>`のみ）、その候補にExact substringとして存在する `content`、判断に必要な行・Field・Operator・値・関係を示す候補固有の `decision_binding` を保持する。さらに `artifact_selection` に `task: select_correct_artifact`、要求、全Optionを覆うDecision axis、共通Fixture／Schema／Dry run／導出検査のReference、候補別結果、検証済み正答集合、Artifact固有の `stem_contract`、全Optionの `explanation_bindings` を持たせる。Stem Artifactだけの問題はOption側を `artifact_types: []`、`artifact_evidence: []` にし、概念問題は両Locationを空Listにする。
 
-`stem_contract` は、learner-visible StemにExact substringとして存在する `artifact_request` と、`scenario.context`、`scenario.input_or_state`、一件以上の `scenario.hard_constraints`、`scenario.expected_observation` を保持する。`deletion_test.artifact_candidates_required` を `true` にし、候補を隠すと解けないことを確認したReview／Fixtureを `review_reference` へ記録する。ValidatorはHard constraint、期待する観測、Decision axis、候補別結果を数値正規化したSignatureとしてBank全体で比較する。Actor、ID、数値Literal、背景文だけを変えて同じ判断を再利用したArtifact問題を拒否する。
+`stem_contract` は学習者に見えるStemのExact substringとして、`artifact_request`、`scenario.context`、`scenario.input_or_state`、一件以上の `scenario.hard_constraints`、`scenario.expected_observation` を保持する。`deletion_test.artifact_candidates_required=true` と確認記録の `review_reference` を持つ。候補を隠しても知識だけで正答が確定する飾りのArtifactは数えない。
 
-`explanation_bindings` は全Option Keyを一度ずつ持つ。各Optionの `artifact_excerpt` はその候補内に存在しDecision axisの値と一致し、`result_excerpt` は共通検証の当該 `candidate_results` に存在し、`explanation_excerpt` はKeyedされた正答または誤答解説に存在して両Excerptを含む。これにより、候補Artifactだけを更新して旧Text問題の解説を残す変更、正答解説だけ更新して誤答解説を放置する変更、全候補へ同じ汎用結果を付ける変更を失敗させる。Text問題から変換するときは旧本文をBaseline hashまたは監査用非表示Sourceとしてだけ保持し、learner-visible Stem／解説へ連結しない。
+重複検査は全候補のArtifact実体をLabel順に依存せず比較する。背景、期待観測、結果の説明、IDへ識別文言を足しても別問にしない。入力依存で同じ候補を使う場合は、共通検証で実際に使った入力・設定を `validation.fixture_inputs` へJSONとして保持する。問題ID、タイトル、差別化用Tokenを入力扱いにしない。入力値の違いだけで別問を正当化せず、判断・挙動・読解Evidenceの実質差は [Artifact基準](exam-question-fidelity.md#4-artifactを使う問題pattern) に従って意味Reviewする。同梱CLIが任意の言い換えやASTの意味的同値性まで証明するとは扱わない。
+
+`explanation_bindings` は全Option Keyを覆う。各 `artifact_excerpt` は当該候補の決定差分でDecision axisの値と一致し、`result_excerpt` は当該 `candidate_results` に存在し、`explanation_excerpt` は候補別の正誤解説に存在して両Excerptを含む。引用片は短く選び、その周囲を自然な解説として書く。全文を固定Slotから組み立てない。
+
+候補固有の決定差分は必要だが、結果Excerptを全候補で一意にする必要はない。別の原因で同じ結果になる誤答も正当である。`candidate_results` は戻り値・型・副作用・評価軸に対応する観測を保持する。最適化問題では複数候補が必須要件を満たしてよく、`validated_correct` は評価軸も適用した採用集合を記録する。戻り値が同じなら、操作回数・運用責務等の比較根拠まで記録して採否を説明する。全候補で観測も比較根拠も同じなら、選定不能として問題を直す。
 
 `correct`は問題形式に合わせる。
 
 - `single_choice`: Option KeyのString
 - `multiple_response`: 正答KeyのList。順序は意味を持たない。`select_count`に正答数を入れるか、選択数を固定しない形式では`selection_instruction`に表示する選択条件を入れる
-- `ordering`: 全Keyを一度ずつ並べたList。順序が意味を持つ
+- `ordering`: 使用するKeyを順に並べたList。少なくとも２つの異なるKeyを使い、未知Key・重複使用を認めない。`ordering_mode: "all"` が既定で全候補を使う。`"subset"` は不要な候補を残せる形式で、選択と一度までの使用を説明する `selection_instruction` を表示する。`select_count` を指定した場合は正答列の長さと一致させる。不採用候補の理由は `wrong_explanations`、採用手順の依存順は `correct_explanation` に記す
 - `matching`: 左側Keyから右側ValueへのObject。少なくとも二つの異なる対応先を持たせ、一対一対応が必要な試験ではProject固有検査で全対応先の一意性も確認する
 
 生成済みMarkdown／HTMLから正答を読み取れる場合、`rendered_correct`も書き出し、生成元の`correct`と照合する。既存ProjectでField名が異なる場合は、読み取り専用Adapterで共通形式へ変換する。
 
 ## 2. 件数目標をJSONで保存する
 
-新規講座、または通常問題集の大幅増量・全面整備で、ユーザーが完成総数を明示していない場合、`total` は次の標準完成件数と一致させる。限定修正、レビュー、公開だけの依頼ではこのPolicyを新たな増量の根拠にしない。
-
-| `credential_level` | `total` |
-|---|---:|
-| `associate-equivalent` | 500 |
-| `professional-equivalent` | 1000 |
+件数の採用と適用範囲は [講座設定](course-settings.md) に従う。以下は同梱の個人用設定を共通JSONへ表す契約であり、全資格の普遍的な問題数ではない。`standard` の `total` は講座設定表の相当レベル別の値と一致させる。限定修正、レビュー、公開だけの依頼では増量しない。別の承認済み設定には対応するモードまたは同等のプロジェクト検査を使う。
 
 `credential_level` は `associate-equivalent`、`professional-equivalent`、`not-applicable` のいずれかとし、ベンダーの公式資格体系、想定経験、試験対象から判断した根拠を別の追跡可能な記録へ残す。`not-applicable` でユーザー指定もない場合は、問題作成前に完成総数を確認する。
 
@@ -349,7 +348,7 @@ IAM-009,removed,ユーザーが重複問題の削除を明示,user-message-2026-
 
 実際には公式試験目標をすべて列挙する。`total` と実数の不一致に加え、目標数、許可されない問題形式、形式別件数、難易度、思考タイプと実数の不一致はエラーにする。公式ガイドが形式別比率を公開していない場合も、`allowed_question_types`には公式に許可された形式を、`question_types`には教材として設計した件数を入れ、その配分理由を別途記録する。問題本文を作る前に `question_source_profile` へSource母数、問題形式、主判断Pattern、公式Weight／Objective、観察した主Objective・主内容Family、Service／Feature・Integration・Lifecycle・制約、Scope gap、Authoring scope decision、`scope_selection_patterns`、`official_scope_extrapolations`、Stem Artifact、Option Artifact、両方、どちらでもない問題の件数・割合、位置別Type件数、分類規則、Authoring targetを保存する。`--require-question-source-profile` でPrimary分布とSource母数、公式Weight、観察Objectiveと公式範囲、Scope Inventory、出題化Pattern、Source未観察Objectiveの一次情報ベースExtrapolation、2×2と割合の整合を検査する。形式名への言及だけをArtifactへ数えない。
 
-`artifact_policy.calibration_evidence` には現行公式ガイドと公式Sample／Practiceの調査結果を含め、Login必須、未発見、旧版もStatusとして残す。全講座共通の `artifact_target_ratio` 既定値は置かない。公式またはユーザーがOption比率を明示した場合だけ保持し、未指定ならSource profileから決めた `minimum_questions_with_artifacts` を直接使う。`artifact_policy.assessment_surfaces`へ公開Navigation上の全独立問題面と各総数・Option Artifact最低数を宣言し、各問の `assessment_surface` と完全一致させる。Stem側の最低数・割合・種類、両方、どちらでもない件数は `question_source_profile.authoring_targets` とプロジェクト固有のLocation別Gateで検査する。最終検査では `--require-course-count-policy`、`--require-metadata-targets`、`--require-artifact-policy` を使い、Question Set、Assessment Surface、Level、根拠、Count Mode、標準件数またはユーザー指定、問題形式、難易度、思考タイプ、公式Calibration Evidence、各宣言Typeの全Option `artifact_evidence`、有効な `artifact_selection`、`stem_contract`、全Optionの `explanation_bindings`、検証済み正答集合、Surface別明示最低数、明示時だけ比率下限、種類別最低数の省略・不一致を失敗にする。Option側では候補不足、同一候補、結果差なし、再利用Scenario契約、候補と一致しない旧解説、架空Wrapper、100文字超の行、Raw Mermaidを件数へ数えない。
+`artifact_policy.calibration_evidence` には現行公式ガイドと公式Sample／Practiceの調査結果を含め、Login必須、未発見、旧版もStatusとして残す。全講座共通の `artifact_target_ratio` 既定値は置かない。公式またはユーザーがOption比率を明示した場合だけ保持し、未指定ならSource profileから決めた `minimum_questions_with_artifacts` を直接使う。`artifact_policy.assessment_surfaces`へ公開Navigation上の全独立問題面と各総数・Option Artifact最低数を宣言し、各問の `assessment_surface` と完全一致させる。Stem側の最低数・割合・種類、両方、どちらでもない件数は `question_source_profile.authoring_targets` とプロジェクト固有のLocation別Gateで検査する。最終検査では `--require-course-count-policy`、`--require-metadata-targets`、`--require-artifact-policy` を使い、Question Set、Assessment Surface、Level、根拠、Count Mode、標準件数またはユーザー指定、問題形式、難易度、思考タイプ、公式Calibration Evidence、各宣言Typeの全Option `artifact_evidence`、有効な `artifact_selection`、`stem_contract`、全Optionの `explanation_bindings`、検証済み正答集合、Surface別明示最低数、明示時だけ比率下限、種類別最低数の省略・不一致を失敗にする。Option側では候補不足、同一候補、採否を説明する観測差なし、再利用候補契約、候補と一致しない旧解説、架空Wrapper、100文字超の行、Raw Mermaidを件数へ数えない。
 
 模擬試験の目標ファイルには `question_set: "mock"` と模擬問題だけの `total`、各分布、各Practice／Mock formの `assessment_surfaces`を入れ、各問にも `question_set: "mock"` と対応する `assessment_surface` を持たせる。同じ `--require-course-count-policy --require-artifact-policy` とLocation別Gateで集合分離、件数、各FormのStem／Option別明示最低数、明示時だけ各比率Floorを検査するが、`credential_level`、`count_mode`、500／1,000問の標準は適用しない。別JSONLへ分ける場合も各Formへ個別に全Gateを実行し、一つの模擬試験だけの成功を全Formの成功とみなさない。
 
@@ -363,11 +362,17 @@ IAM-002,FIXED,reviewer-a,曖昧な条件を追加して再確認,sha256:qbank-v1
 
 意味Reviewと独立Reviewは別CSVにする。`status`は`PASS`または`FIXED`のみ完了とし、全問題IDが各台帳へ一度ずつ存在し、Reviewerが空でなく、`FIXED`には修正内容を必須とする。同じ問題の意味Reviewerと独立Reviewerは異なる値にする。
 
-Review stamp用CLIは、実際に確認したReviewer identityと範囲（全件、Domain、ID list、または固定Manifest）を明示入力として受け、台帳へそのまま記録する。一つのBoolean確認や一回の実行から、Domain別の複数Reviewer名をHard-codeして合成してはならない。一人が複数Domainを確認した場合は一つの正直なIdentityで記録し、二人によるReviewを主張するなら各Reviewerが自分の範囲を別々に確定した証拠を残す。Validatorは文字列が異なるだけで独立性を認定せず、Identity、Scope、現在Manifest hash、stamp操作の対応を検査する。
+Review記録は、実際の担当者Identity、確認した問題ID範囲、固定した問題Hash、確認日時、確認結果を追跡できる実記録へのReferenceを保持する。記録先は既存Reviewシステム、実行Log、担当者の確認記録などでよい。一回の確認から複数の担当者名を合成しない。同一人物・同一エージェントを別名で二人分に扱わない。
 
-Reviewを固定するContent manifestには、Review後も変化しない教材、Generator、Validator、Source mapを含める。そこへReview台帳、Stamp出力、またはContent hashとStatusを追記するAcceptance ADR自身を含めて循環参照を作らない。ADRを`Proposed`から`Accepted`へ変えただけでReview hashがstaleになる設計は禁止する。ADRやRelease metadataも含めた全体Hashが必要なら、Review用Content manifestとは別のRelease manifestとしてAcceptance後に計算し、二つの用途と境界を明記する。
+同梱CLIが確認するのはCSVのID網羅性、状態、担当者名の非空・一致、修正理由、現在の問題Hashとの対応である。名前が違うだけでは本人性・実施事実・独立性を認定できず、Scopeや確定操作の証拠も同梱CSVだけでは検証しない。独立Reviewの完了は、実記録と台帳のIdentity・対象ID・Hash・確認操作を別途照合して判定する。プロジェクトで検査を自動化する場合も、証拠元の信頼性と機械で確認した範囲を明記する。証拠がない場合は「台帳整合のみ確認」と報告し、独立Review済みとはしない。
 
-`question_hash`は、検証用内部Fieldを除く一問分のJSONをKey順でCanonical化し、UTF-8へEncodeしたVersion付きSHA-256（`sha256:qbank-v1:...`）とする。CRLF／LFとUnicode NFCを正規化し、Multiple Responseの正答集合は順不同として扱うが、数値、比較Operator、Orderingの順序は保持する。同梱Validatorの`--hash-report`で現在Hashを出力できる。問題を変更したら旧HashのReviewを完了扱いにせず、再Reviewして台帳を更新する。
+Review用Content manifestには、そのReviewerが実際に確認した固定Surfaceだけを含める。問題Reviewなら正規問題、生成問題、対応Objective表等へ限定し、確認外の講義・Generator・Validatorを自動で含めない。Review台帳、Stamp出力、Acceptance ADRは循環を避けて除外する。全体のRelease manifestは別に保持する。
+
+`question_hash` は内部Fieldを除く一問分のJSONをCanonical化したVersion付きSHA-256で、講義Linkも含む。`--hash-report` で現在値を出力できる。CRLF／LF、Unicode NFC、Multiple Responseの正答集合順を正規化し、数値・比較Operator・Orderingの順序を保持する。最終Hashから確認した内容が変わればReview台帳を更新する。
+
+初回は全対象を完成版で確認する。確認済み版の変更では [再レビュー基準](review-update-policy.md) に従い、過去の有効な確認と今回の影響範囲の確認を合わせて現行版を判定する。各役割の実担当者による差分確認を記録し、古いHashのPASSの自動転記や、リンクをHashから外す回避はしない。CSVの形式は変えず、`notes` や既存の実記録から確認内容へ戻れるようにする。
+
+全面再作成のDraft校正→必要知識抽出→講義制作→Link割当て→正式Reviewの順序は [講義再制作基準](lecture-completeness-and-prerequisite-closure.md#2-問題集の全面再作成では問題から講義を作り直す) に従う。Draft Snapshotを最終Review Hashと混同せず、LinkをHash対象から外して整合検査を回避しない。
 
 ## 4. 一次情報を追跡する
 
@@ -402,6 +407,10 @@ Validatorの自己検査では、実問題全体のPASS／FAILとは別に、各
 - 同一問題内または問題間の同一解説、正答位置の偏り: 警告。最終検査の `--fail-on-warnings` で未解決なら失敗
 
 Option順を変更するGeneratorでは、表示後の正答・解説対応に加え、Label参照の置換境界を回帰テストする。少なくとも `Option A` や `A and C` のような明示的Labelは新しいLabelへ追従し、英語の `A sample` と区分名の `Project A` は変更されないことを確認する。
+
+短文警告の80／50文字はCLIの既存既定であり、執筆の最低文字数ではない。短くても候補固有の理由が完結する場合はPaddingを足さず、Source・教材言語・形式に基づいて `--min-correct-explanation` と `--min-wrong-explanation` の設定を校正し、根拠を記録する。空解説、対応欠落、汎用句だけの説明、正答性、Artifact Binding等の必須検査は維持する。短文を含む正常例と具体的理由のない失敗例を別々に確認し、全体を通すためだけに閾値を緩めない。
+
+文全体の類似度だけでは、共通接尾辞や同じ判断の名詞差し替えを見逃す。Source執筆基準に従い、文・段落・長い接頭辞／末尾・判断の同じ群も読む。定番の問い、UIラベル、正式語の反復は自動的な失敗にしない。これらの意味判断を同梱CLIがすべて自動判定するとは報告しない。
 
 閾値は言語や問題形式に合わせて変更できるが、変更値と理由をリポジトリへ記録する。高類似でも正当な別問題なら、allowlist CSVへ比較対象のLabelと理由を記録する。
 
@@ -458,7 +467,7 @@ Windowsで成功しても、公開CIがLinuxならCI上でも同じ検査を実�
 既存検査で代用する場合、少なくとも次の対応を記録する。
 
 - 必須項目と選択肢別解説の完全性
-- [explanation-writing-standard.md](explanation-writing-standard.md) に定義した、解説Sourceがない場合の既定説明Contract（候補のCapability／Action、決定条件、適合／不適合、結果）と、Sourceがある場合の `explanation_source_profile` 優先。全候補の候補固有因果、近接誤答の境界、Multiple Responseの必要十分性を意味Reviewし、同じ接頭辞・末尾の大量反復を失敗させる
+- [source-calibrated-question-writing.md](source-calibrated-question-writing.md) と [explanation-writing-standard.md](explanation-writing-standard.md) のSource優先と既定方針。文体・形式・情報順・候補の比較・解説の幅を最終表示で確認する。候補固有の採否理由、実現可否と最適化の区別、Multiple Responseの関係を意味Reviewし、不要な長い共通文と実質重複を発生源から直す
 - Question Setと通常問題／模擬問題の分離
 - 資格Levelと公式根拠、Count Mode、標準件数またはユーザー指定、実数の一致
 - 問題形式、正答集合・順序・対応関係、Rendered Answerの一致

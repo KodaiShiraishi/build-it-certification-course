@@ -1,4 +1,4 @@
 interface:
   display_name: "Build IT Certification Course"
   short_description: "Databricks・AWSなどのIT資格講座を設計・改善・公開"
-  default_prompt: "Use $build-it-certification-course to design or improve an exam-aligned certification course, confirm its language, record an ADR, and validate the learner-visible course deeply."
+  default_prompt: "Use $build-it-certification-course to design or improve an exam-aligned course, prioritize supplied question and explanation sources over the writing defaults, and validate the learner-visible result."

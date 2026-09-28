@@ -239,6 +239,17 @@ def _write_fixture(root: Path) -> tuple[Path, Path, Path, Path, dict]:
         ],
     }
     manifest["learning_units"][1]["curriculum_unit_id"] = "curriculum.object-storage"
+    question_jsonl.write_text(json.dumps({
+        "id": "Q-001",
+        "stem": f"Which {entry_alias} design satisfies the requirement?",
+        "options": {"A": f"Keep the {entry_alias} design.", "B": f"Replace the {entry_alias} design."},
+        "correct_explanation": f"The {entry_alias} owns the required boundary.",
+        "wrong_explanations": {"B": f"The alternative misuses the {entry_alias} boundary."},
+        "learning_requirements": {
+            key: manifest["assessments"][0][key]
+            for key in ("requirements", "services", "artifact_types", "integration_patterns", "named_services")
+        },
+    }) + "\n", encoding="utf-8")
     manifest_path = root / "learning-contract.json"
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     manifest["_fixture_outside_service_evidence"] = outside_service_evidence
@@ -308,6 +319,37 @@ def main() -> int:
             require_service_mention_links=True,
         )
         assert not findings, findings
+
+        omitted = copy.deepcopy(valid)
+        omitted["assessments"][0]["requirements"] = ["entry.reading"]
+        for key in ("lecture_links", "services", "artifact_types", "integration_patterns",
+                    "service_curriculum_links", "named_services", "service_entry_links"):
+            omitted["assessments"][0][key] = []
+        assert "canonical-learning-requirements-mismatch" in _codes(omitted, root, inventory, lecture_inventory)
+
+        canonical_text = inventory.read_text(encoding="utf-8")
+        canonical = json.loads(canonical_text)
+        both_omit = copy.deepcopy(canonical)
+        both_omit["learning_requirements"] = {
+            key: omitted["assessments"][0][key] for key in canonical["learning_requirements"]
+        }
+        inventory.write_text(json.dumps(both_omit) + "\n", encoding="utf-8")
+        assert "canonical-service-mention-unbound" in _codes(omitted, root, inventory, lecture_inventory)
+        # Observe each question surface, but protect code and URL text.
+        for field in ("stem", "options", "correct_explanation", "wrong_explanations"):
+            surface = copy.deepcopy(both_omit)
+            surface.update(stem="A workload needs a design.", options={"A": "Keep it", "B": "Replace it"},
+                           correct_explanation="This meets the requirement.", wrong_explanations={"B": "This changes the boundary."})
+            surface[field] = canonical[field]
+            inventory.write_text(json.dumps(surface) + "\n", encoding="utf-8")
+            assert "canonical-service-mention-unbound" in _codes(omitted, root, inventory, lecture_inventory), field
+        protected = copy.deepcopy(surface)
+        protected["wrong_explanations"] = {"B": "Inspect `EKS` and https://example.test/EKS only."}
+        inventory.write_text(json.dumps(protected) + "\n", encoding="utf-8")
+        assert "canonical-service-mention-unbound" not in _codes(omitted, root, inventory, lecture_inventory)
+        inventory.write_text('{"id":"Q-001"}\n', encoding="utf-8")
+        assert "missing-canonical-learning-requirements" in _codes(valid, root, inventory, lecture_inventory)
+        inventory.write_text(canonical_text, encoding="utf-8")
 
         legacy_compatible = copy.deepcopy(valid)
         legacy_compatible.pop("lecture_policy")

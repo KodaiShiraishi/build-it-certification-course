@@ -2,6 +2,8 @@
 
 2つ以上の資格講座を同じサイトで扱う場合、または既存サイトのヘッダー、タブ、サイドバーを変更する場合に使う。フレームワーク固有の実装より、情報階層、アクセシビリティ、生成物検証を優先する。
 
+表示方式は [講座設定](course-settings.md) の個人用サイト設定または既存の承認済み設定に従う。以下のプルダウン・タブ・サイドバーは個人用設定の実装方針であり、別構成の教材へ無断で置換しない。
+
 ## 情報階層を分ける
 
 1. 講座切替は、左上などの一貫した場所に置くコンパクトなプルダウンにする。
@@ -13,15 +15,9 @@
 
 ## Serviceカテゴリを上部の第一級学習経路にする
 
-新規講座、講義の大幅更新、全面品質改修では、各講座のHeader tabまたは同等の上部Course navigationに、確定した教材言語の独立したServiceカテゴリを置く。ServiceカテゴリはDomain／Task講義、通常問題、模擬問題より前へ配置する。Introduction、Foundation、用語集は先行できるが、Service知識を使う教材より後ろへ置かない。
+この導線を採用する場合の配置・固有講義・説明観点・正規一覧は [学習契約](lecture-completeness-and-prerequisite-closure.md#4-unit別の必須説明dimension) を、本文リンクは [リンク基準](service-mention-linking.md) を使う。
 
-- ServiceカテゴリのLinkは包括的Service curriculumのLanding pageへ向ける。
-- Landing pageから全固有Service／主要機能の正式名称を検索・一覧でき、各Entryの固定Anchorへ直接移動できるようにする。責務Family別Pageを中間の整理単位にしても、Landing → Family page → 手動探索を強制しない。各講義から関連Domain／Task講義へ戻れるようにする。
-- 講義と問題の本文に現れる正式名称・正規aliasも、同じ固有Entryの固定Anchorへ直接Linkする。Stem、全Option、正答・誤答解説を含め、関連Service一覧やLanding Linkだけで本文中の裸aliasを代用しない。
-- Serviceカテゴリを親カテゴリの下へ隠さず、他の第一級カテゴリと同じ視認性、操作領域、active表示を持たせる。
-- 一枚のhandbookやService名一覧だけをカテゴリ内容にせず、問題で使う全Serviceを11 Dimensionで教える正規Page Inventoryと固有Service-entry Inventoryを持たせる。Family単位の11 Dimensionだけで子Serviceを教えたことにしない。
-- 正規Navigation InventoryにCategory ID、Kind、Label、Sequence、Landing path、Page path、Parentを保持し、学習契約Manifestと完全一致させる。
-- Source設定だけで完了せず、全生成HTMLでカテゴリ名、順序、Landing link、active状態、カテゴリ配下のSidebar範囲を検査する。
+本書では、他の第一級カテゴリと同じ視認性と操作領域があること、現在地が分かること、カテゴリ内のページへ進めることを確認する。設定ファイルだけで完了にせず、生成HTMLで順序・入口・現在地・サイドバーの範囲を検査する。
 
 ## 壊れにくく実装する
 
@@ -42,9 +38,7 @@
 - 講座切替が1つあり、講座名とリンク先の集合が期待値と一致する。
 - 現在講座だけがcurrentになり、講座外ページと404では誤ったcurrentがない。
 - 現在講座のカテゴリ名、順序、件数が一致し、activeカテゴリが1つだけある。
-- Serviceカテゴリが上部の第一級カテゴリとして一つだけ存在し、Domain／Task、通常問題、模擬問題より前にあり、正しいCurriculum landing pageへLinkしている。
-- Service landingの全正式名称Linkが宣言されたPageと固定Anchorへ解決し、生成HTMLに同じ見出しとEntry本文が存在する。
-- 全講義・問題Pageのlearner-visible Service aliasが一つのLink内にあり、その`href`が宣言されたEntry Pageと固定Anchorへ解決する。Code、URL、HTML属性は対象外とし、Landing止まり、外部Documentation、別Entry、裸aliasを失敗させる。
+- サービス学習の導線を採用した場合、学習契約の配置・入口とリンク基準の全出現検査を満たす。
 - サイドバーの講座・カテゴリ文脈がactive状態と一致する。
 - サイドバー内の各リンクが、独立して定義した現在カテゴリの許可範囲内にある。
 - 講座一覧と404では講座内タブを出さず、サイドバーを講座一覧など必要最小限にする。
@@ -74,4 +68,4 @@ GitHub Pagesのproject siteなど、ドメイン直下ではない場所へ公�
 
 ブラウザを使わず、厳格ビルド、生成HTML・CSS・JavaScript検査、JavaScript構文検査、直接HTTP確認を行う。レスポンシブ配置、クリック、タップ、検索、プルダウンの実操作は未検証として報告する。
 
-ナビゲーションだけを変更した場合も、講義や問題数、ID、生成再現性など既存の講座品質検査を回し、意図しない回帰がないことを確認する。
+ナビゲーションだけを変更した場合も、件数・ID・生成再現性等の既存検査を回す。内容の再レビューは [変更の影響](review-update-policy.md) に応じて行い、表示変更から教材内容への影響も確認する。
